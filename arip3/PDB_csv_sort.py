@@ -1,0 +1,352 @@
+import math
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+
+from .utils import timer
+from .typing import *
+
+
+def range_kind(surface, volume, threshold):
+    info_df = pd.DataFrame(list(surface.items()), columns=['Pair', 'Tuple'])
+    info_df[['Surface', 'Distance', 'Type1', 'Type2']] = pd.DataFrame(info_df['Tuple'].tolist(), index=info_df.index)
+    info_df[['Residue1', 'Atom1', 'Residue2', 'Atom2']] = info_df['Pair'].apply('_'.join).str.split('_', expand=True)
+    
+    # Add volume, atom type, interaction type
+    info_df['Volume'] = 0
+    info_df['Range']  = 0
+    info_df['Kind']   = 'UNDEF'
+    info_df['Dist1']  = info_df['Residue1'].apply(lambda x: int(x.split('-')[0].split(';')[0][1:]))
+    info_df['Dist2']  = info_df['Residue2'].apply(lambda x: int(x.split('-')[0].split(';')[0][1:]))
+    info_df['Dist']   = info_df['Dist1'] - info_df['Dist2']
+    
+    # Match volume
+    Volu = pd.DataFrame(list(volume.items()), columns=['Pair', 'Volume'])
+    info_df = info_df.merge(Volu[['Pair', 'Volume']], on='Pair', how='left')
+    info_df = info_df.rename(columns={'Volume_y': 'Volume'})
+    
+    # Some contacts with almost zero volume return null values during calculation, they are invalid data
+    info_df = info_df.dropna(subset=['Volume'])
+    
+    # Match interaction type
+        # Below are proteins
+    info_df['Kind'] = np.where((info_df['Type1'] != 'D') & (info_df['Type1'] != 'R') & # Other interactions of amino acids
+                               (info_df['Type1'] != 'X') & (info_df['Type2'] != 'D') &
+                               (info_df['Type2'] != 'R') & (info_df['Type2'] != 'X'), 'OTHER', info_df['Kind'])
+    
+    info_df['Kind'] = np.where((info_df['Type1'] == 'I') & # Hydrogen bond
+                               (info_df['Type2'] == 'I') &
+                               (1.5 <= info_df['Distance']) &
+                               (info_df['Distance'] <= 3.5), 'HB', info_df['Kind'])
+    info_df['Kind'] = np.where((info_df['Type1'] == 'I') &
+                               (info_df['Type2'] == 'II') &
+                               (1.5 <= info_df['Distance']) &
+                               (info_df['Distance'] <= 3.5), 'HB', info_df['Kind'])
+    info_df['Kind'] = np.where((info_df['Type1'] == 'I') &
+                               (info_df['Type2'] == 'III') &
+                               (1.5 <= info_df['Distance']) &
+                               (info_df['Distance'] <= 3.5), 'HB', info_df['Kind'])
+    info_df['Kind'] = np.where((info_df['Type1'] == 'II') &
+                               (info_df['Type2'] == 'I') &
+                               (1.5 <= info_df['Distance']) &
+                               (info_df['Distance'] <= 3.5), 'HB', info_df['Kind'])
+    info_df['Kind'] = np.where((info_df['Type1'] == 'II') &
+                               (info_df['Type2'] == 'III') &
+                               (1.5 <= info_df['Distance']) &
+                               (info_df['Distance'] <= 3.5), 'HB', info_df['Kind'])
+    info_df['Kind'] = np.where((info_df['Type1'] == 'III') &
+                               (info_df['Type2'] == 'I') &
+                               (1.5 <= info_df['Distance']) &
+                               (info_df['Distance'] <= 3.5), 'HB', info_df['Kind'])
+    info_df['Kind'] = np.where((info_df['Type1'] == 'III') &
+                               (info_df['Type2'] == 'II') &
+                               (1.5 <= info_df['Distance']) &
+                               (info_df['Distance'] <= 3.5), 'HB', info_df['Kind'])
+    
+    info_df['Kind'] = np.where((info_df['Type1'] == 'V') & # Aromatic interaction
+                               (info_df['Type2'] == 'V'), 'AROM', info_df['Kind'])
+    
+    info_df['Kind'] = np.where((info_df['Type1'] == 'IV') & # Hydrophobic interaction
+                               (info_df['Type2'] == 'IV'), 'PHOB', info_df['Kind'])
+    info_df['Kind'] = np.where((info_df['Type1'] == 'IV') &
+                               (info_df['Type2'] == 'V'),  'PHOB', info_df['Kind'])
+    info_df['Kind'] = np.where((info_df['Type1'] == 'V') &
+                               (info_df['Type2'] == 'IV'), 'PHOB', info_df['Kind'])
+    
+    info_df['Kind'] = np.where((info_df['Type1'] == 'I') & # Destabilizing interaction
+                               (info_df['Type2'] == 'IV'), 'DC', info_df['Kind'])
+    info_df['Kind'] = np.where((info_df['Type1'] == 'II') &
+                               (info_df['Type2'] == 'II'), 'DC', info_df['Kind'])
+    info_df['Kind'] = np.where((info_df['Type1'] == 'II') &
+                               (info_df['Type2'] == 'IV'), 'DC', info_df['Kind'])
+    info_df['Kind'] = np.where((info_df['Type1'] == 'II') &
+                               (info_df['Type2'] == 'VIII'), 'DC', info_df['Kind'])
+    info_df['Kind'] = np.where((info_df['Type1'] == 'III') &
+                               (info_df['Type2'] == 'III'), 'DC', info_df['Kind'])
+    info_df['Kind'] = np.where((info_df['Type1'] == 'III') &
+                               (info_df['Type2'] == 'IV'), 'DC', info_df['Kind'])
+    info_df['Kind'] = np.where((info_df['Type1'] == 'III') &
+                               (info_df['Type2'] == 'VII'), 'DC', info_df['Kind'])
+    info_df['Kind'] = np.where((info_df['Type1'] == 'IV') &
+                               (info_df['Type2'] == 'I'), 'DC', info_df['Kind'])
+    info_df['Kind'] = np.where((info_df['Type1'] == 'IV') &
+                               (info_df['Type2'] == 'II'), 'DC', info_df['Kind'])
+    info_df['Kind'] = np.where((info_df['Type1'] == 'IV') &
+                               (info_df['Type2'] == 'III'), 'DC', info_df['Kind'])
+    info_df['Kind'] = np.where((info_df['Type1'] == 'VII') &
+                               (info_df['Type2'] == 'III'), 'DC', info_df['Kind'])
+    info_df['Kind'] = np.where((info_df['Type1'] == 'VII') &
+                               (info_df['Type2'] == 'VII'), 'DC', info_df['Kind'])
+    info_df['Kind'] = np.where((info_df['Type1'] == 'VIII') &
+                               (info_df['Type2'] == 'II'), 'DC', info_df['Kind'])
+    info_df['Kind'] = np.where((info_df['Type1'] == 'VIII') &
+                               (info_df['Type2'] == 'VIII'), 'DC', info_df['Kind'])
+    
+    info_df['Kind'] = np.where((info_df['Atom1'] == 'C') & # Covalent peptide bond, and the next residue
+                               (info_df['Atom2'] == 'N') &
+                               (info_df['Type1'] != 'X') & (info_df['Type2'] != 'X') &
+                               ((info_df['Residue1'].apply(lambda x: x[0]) ==
+                                 info_df['Residue2'].apply(lambda x: x[0]))) &
+                               (info_df['Dist'] == -1), 'PB', info_df['Kind'])
+    info_df['Kind'] = np.where((info_df['Atom1'] == 'N') & # Covalent peptide bond, and the previous residue
+                               (info_df['Atom2'] == 'C') &
+                               (info_df['Type1'] != 'X') & (info_df['Type2'] != 'X') &
+                               ((info_df['Residue1'].apply(lambda x: x[0]) ==
+                                 info_df['Residue2'].apply(lambda x: x[0]))) &
+                               (info_df['Dist'] == 1), 'PB', info_df['Kind'])
+    
+    info_df['Kind'] = np.where((info_df['Atom1'] == 'SG') & # Covalent disulfide bond
+                               (info_df['Atom2'] == 'SG') &
+                               (1.95 <= info_df['Distance']) &
+                               (info_df['Distance'] <= 2.1), 'SS', info_df['Kind'])
+    
+        # Below are nucleic acids
+    info_df['Kind'] = np.where((info_df['Type1'] == 'D') & # Interactions between deoxyribonucleotides
+                               (info_df['Type2'] == 'D'), 'DD', info_df['Kind'])
+    info_df['Kind'] = np.where((info_df['Type1'] == 'R') & # Interactions between ribonucleotides
+                               (info_df['Type2'] == 'R'), 'RR', info_df['Kind'])
+    info_df['Kind'] = np.where((info_df['Type1'] == 'D') & # Interactions between ribonucleotides and deoxyribonucleotides
+                               (info_df['Type2'] == 'R'), 'DR', info_df['Kind'])    
+    info_df['Kind'] = np.where((info_df['Type1'] == 'R') & # Interactions between ribonucleotides and deoxyribonucleotides
+                               (info_df['Type2'] == 'D'), 'DR', info_df['Kind'])
+    info_df['Kind'] = np.where((info_df['Type1'] != 'D') & (info_df['Type1'] != 'R') & # Interactions between amino acids and deoxyribonucleotides
+                               (info_df['Type1'] != 'X') & (info_df['Type2'] == 'D'), 'AD', info_df['Kind'])
+    info_df['Kind'] = np.where((info_df['Type1'] == 'D') & (info_df['Type2'] != 'R') & # Interactions between amino acids and deoxyribonucleotides
+                               (info_df['Type2'] != 'X') & (info_df['Type2'] != 'D'), 'AD', info_df['Kind'])
+    info_df['Kind'] = np.where((info_df['Type1'] != 'D') & (info_df['Type1'] != 'R') & # Interactions between amino acids and ribonucleotides
+                               (info_df['Type1'] != 'X') & (info_df['Type2'] == 'R'), 'AR', info_df['Kind'])
+    info_df['Kind'] = np.where((info_df['Type1'] == 'R') & (info_df['Type2'] != 'R') & # Interactions between amino acids and ribonucleotides
+                               (info_df['Type2'] != 'X') & (info_df['Type2'] != 'D'), 'AR', info_df['Kind'])
+
+    info_df['Kind'] = np.where((info_df['Atom1'] == "O3'") & # Covalent phosphodiester bond, and the next residue
+                               (info_df['Atom2'] == 'P') & (info_df['Type2'] != 'X') &
+                               ((info_df['Residue1'].apply(lambda x: x[0]) ==
+                                 info_df['Residue2'].apply(lambda x: x[0]))) &
+                               (info_df['Dist'] == -1), 'PD', info_df['Kind'])
+    info_df['Kind'] = np.where((info_df['Atom1'] == 'P') & # Covalent phosphodiester bond, and the previous residue
+                               (info_df['Atom2'] == "O3'") & (info_df['Type1'] != 'X') &
+                               ((info_df['Residue1'].apply(lambda x: x[0]) ==
+                                 info_df['Residue2'].apply(lambda x: x[0]))) &
+                               (info_df['Dist'] == 1), 'PD', info_df['Kind'])
+    
+    # Match interaction distance range
+    info_df['Range'] = np.where((abs(info_df['Dist']) <= 2) & # Short range
+                                ((info_df['Residue1'].apply(lambda x: x[0]) ==
+                                  info_df['Residue2'].apply(lambda x: x[0]))), 'S', info_df['Range'])
+    info_df['Range'] = np.where((abs(info_df['Dist']) > 2) & # Medium range
+                                (abs(info_df['Dist']) <= 4) &
+                                ((info_df['Residue1'].apply(lambda x: x[0]) ==
+                                  info_df['Residue2'].apply(lambda x: x[0]))), 'M', info_df['Range'])
+    info_df['Range'] = np.where((abs(info_df['Dist']) > 4) & # Long range
+                                (abs(info_df['Dist']) <= 10) &
+                                ((info_df['Residue1'].apply(lambda x: x[0]) ==
+                                  info_df['Residue2'].apply(lambda x: x[0]))), 'L1', info_df['Range'])
+    info_df['Range'] = np.where((abs(info_df['Dist']) > 10) &
+                                (abs(info_df['Dist']) <= 20) &
+                                ((info_df['Residue1'].apply(lambda x: x[0]) ==
+                                  info_df['Residue2'].apply(lambda x: x[0]))), 'L2', info_df['Range'])
+    info_df['Range'] = np.where((abs(info_df['Dist']) > 20) &
+                                (abs(info_df['Dist']) <= 30) &
+                                ((info_df['Residue1'].apply(lambda x: x[0]) ==
+                                  info_df['Residue2'].apply(lambda x: x[0]))), 'L3', info_df['Range'])
+    info_df['Range'] = np.where((abs(info_df['Dist']) > 30) &
+                                (abs(info_df['Dist']) <= 40) &
+                                ((info_df['Residue1'].apply(lambda x: x[0]) ==
+                                  info_df['Residue2'].apply(lambda x: x[0]))), 'L4', info_df['Range'])
+    info_df['Range'] = np.where((abs(info_df['Dist']) > 40) &
+                                (abs(info_df['Dist']) <= 50) &
+                                ((info_df['Residue1'].apply(lambda x: x[0]) ==
+                                  info_df['Residue2'].apply(lambda x: x[0]))), 'L5', info_df['Range'])
+    info_df['Range'] = np.where((abs(info_df['Dist']) > 50) &
+                                ((info_df['Residue1'].apply(lambda x: x[0]) ==
+                                  info_df['Residue2'].apply(lambda x: x[0]))), 'L6', info_df['Range'])
+    # Interchain
+    info_df['Range'] = np.where((info_df['Residue1'].apply(lambda x: x[0]) !=
+                                 info_df['Residue2'].apply(lambda x: x[0])), 'I', info_df['Range'])
+    
+    # Volume might be a float, but if the volume based on electron density is calculated, it will be a list
+    is_list = info_df['Volume'].apply(lambda x: isinstance(x, list))
+    if is_list.any() == True:
+        tmp_df = info_df.loc[is_list, 'Volume'].apply(pd.Series)
+        tmp_df.columns = ['Volume', 'EDvolume']
+        info_df = pd.concat([info_df.drop(['Volume'], axis=1), tmp_df], axis=1)
+
+        all_df = info_df[['Residue1', 'Atom1', 'Type1', 'Residue2', 'Atom2', 'Type2',
+                          'Distance', 'Surface', 'Volume', 'EDvolume', 'Range', 'Kind']]
+        
+    else:
+        all_df = info_df[['Residue1', 'Atom1', 'Type1', 'Residue2', 'Atom2', 'Type2',
+                          'Distance', 'Surface', 'Volume', 'Range', 'Kind']]
+    
+    # If screen by threshold
+    if threshold is not None:
+        all_df = all_df[(all_df['Surface'] >= threshold[0]) & (all_df['Volume'] >= threshold[1])]
+    
+    return all_df
+
+
+def summary(dihedral_angle, Residues):
+    # Summary of each residue
+    EMPTY = np.zeros([len(Residues)])
+    sum_df = pd.DataFrame()
+    sum_df['Residue']    = list(Residues.keys())
+    sum_df['Phi']        = EMPTY.copy()
+    sum_df['Psi']        = EMPTY.copy()
+    sum_df['Cova_BSA']   = EMPTY.copy()
+    sum_df['Cova_Volu']  = EMPTY.copy()
+    sum_df['Cova_EDV']   = np.nan # Add first, if not available, delete later
+    sum_df['NC_BSA']     = EMPTY.copy()
+    sum_df['NC_Volu']    = EMPTY.copy()
+    sum_df['NC_EDV']     = np.nan # Add first, if not available, delete later
+    sum_df['UNDEF_BSA']  = np.nan 
+    sum_df['UNDEF_Volu'] = np.nan 
+    sum_df['UNDEF_EDV']  = np.nan # Unknown type of interaction, add first, if not available, delete later
+    
+    for i in range(len(sum_df)):
+        a_res = sum_df.loc[i]
+
+        # Match dihedral angle
+        if dihedral_angle:
+            if a_res['Residue'] in dihedral_angle:
+                phi, psi = dihedral_angle[a_res['Residue']]
+            else:
+                phi, psi = None, None
+        else:
+            phi, psi = None, None
+        
+        # Convert to degrees or set to Nan
+        sum_df.loc[i, 'Phi'] = np.nan if phi is None else f'{math.degrees(phi):.3f}'
+        sum_df.loc[i, 'Psi'] = np.nan if psi is None else f'{math.degrees(psi):.3f}'
+        
+        # Non-covalent and covalent interaction surface and volume
+        interaction = Residues[a_res['Residue']]
+        NC   = interaction[~interaction['Kind'].isin(['SS', 'PB', 'PD', 'UNDEF'])]
+        Cova = interaction[ interaction['Kind'].isin(['SS', 'PB', 'PD'])]
+        UD   = interaction[ interaction['Kind'].isin(['UNDEF'])]
+        
+        # BSA, Buried Surface Area
+        sum_df.loc[i, 'Cova_BSA']  = np.nansum(Cova['Surface'])
+        sum_df.loc[i, 'Cova_Volu'] = np.nansum(Cova['Volume'])
+        sum_df.loc[i, 'NC_BSA']    = np.nansum(NC['Surface'])
+        sum_df.loc[i, 'NC_Volu']   = np.nansum(NC['Volume'])
+        
+        if 'EDvolume' in interaction.columns:
+            sum_df.loc[i, 'Cova_EDV'] = np.nansum(Cova['EDvolume'])
+            sum_df.loc[i, 'NC_EDV']   = np.nansum(NC['EDvolume'])
+        
+        if not UD.empty:
+            sum_df.loc[i, 'UNDEF_BSA']  = np.nansum(UD['Surface'])
+            sum_df.loc[i, 'UNDEF_Volu'] = np.nansum(UD['Volume'])
+            if 'EDvolume' in interaction.columns:
+                sum_df.loc[i, 'UNDEF_EDV']   = np.nansum(UD['EDvolume'])
+            
+    # Round the columns 'Cova_BSA', 'Cova_Volu', 'Cova_EDV', 'NC_BSA', 'NC_Volu', 'NC_EDV',
+    # 'UNDEF_BSA', 'UNDEF_Volu', 'UNDEF_EDV' to three decimal places
+    sum_df[['Cova_BSA',  'Cova_Volu',  'Cova_EDV',
+            'NC_BSA',    'NC_Volu',    'NC_EDV',
+            'UNDEF_BSA', 'UNDEF_Volu', 'UNDEF_EDV']] = sum_df[['Cova_BSA',  'Cova_Volu',  'Cova_EDV',
+                                                               'NC_BSA',    'NC_Volu',    'NC_EDV',
+                                                               'UNDEF_BSA', 'UNDEF_Volu', 'UNDEF_EDV']].round(3)
+    
+    # Sort by chain and sequence
+    sum_df['Chain']    = sum_df['Residue'].str[0]
+    sum_df['Sequence'] = sum_df['Residue'].apply(lambda x: int(x.split('-')[0].split(';')[0][1:]))
+    sorted_df = sum_df.sort_values(['Chain', 'Sequence'])
+
+    # If all are nucleic acids, there are no dihedral angle parameters
+    if set(sorted_df['Phi']) == {''} and set(sorted_df['Phi']) == {''}: # If both are empty values, then they are two 'True'
+        res_df = sorted_df.drop(columns=['Chain', 'Sequence', 'Phi', 'Psi']).dropna(axis=1, how='all')
+    else:
+        res_df = sorted_df.drop(columns=['Chain', 'Sequence']).dropna(axis=1, how='all')
+
+    res_df['Residue'] = res_df['Residue'].str.replace('-', '')
+    res_df['Residue'] = res_df['Residue'].str.replace(';', '_')
+    
+    return res_df
+
+
+def pdb_csv_sort(idx:int, name:str, dihedral_angle:Angles, surface:Surfaces, volume:Volumes, out_path:Path, threshold:List[float], compress:bool, disable_print=False):
+    @timer(disable_print=disable_print)
+    def make_result():
+        out_dp = out_path / (name+'_z') if compress else out_path / name
+        out_dp.mkdir(parents=True, exist_ok=True)
+        
+        # If there is only one MODEL
+        if idx == -1:
+            all_df = range_kind(surface, volume, threshold)
+            
+            all_tmp = all_df.copy()
+            all_tmp['Residue1'] = all_tmp['Residue1'].str.replace('-', '')
+            all_tmp['Residue1'] = all_tmp['Residue1'].str.replace(';', '_')
+            all_tmp['Residue2'] = all_tmp['Residue2'].str.replace('-', '')
+            all_tmp['Residue2'] = all_tmp['Residue2'].str.replace(';', '_')
+            
+            Residues = dict(list(all_df.groupby('Residue1')))
+            Results  = dict(list(all_tmp.groupby('Residue1')))
+            
+            res_df = summary(dihedral_angle, Residues)
+            
+            if compress:
+                all_tmp.to_csv(out_dp / f'_ALL_{name}.gz', compression='gzip', index=0)
+                res_df.to_csv(out_dp / f'_SUM_{name}.gz', compression='gzip', index=0)
+                for res in Results:
+                    Results[res].to_csv(out_dp / f'{res}.gz', compression='gzip', index=0)
+            else:
+                all_tmp.to_csv(out_dp / f'_ALL_{name}.csv', index=0)    # Summary of contacts
+                res_df.to_csv(out_dp / f'_SUM_{name}.csv', index=0)     # Dihedral angles, etc.
+                for res in Results:
+                    Results[res].to_csv(out_dp / f'{res}.csv', index=0) # Each residue
+
+        # If there are multiple MODELs
+        elif idx >= 0:
+            model_dp = out_dp / f'{name}_{idx}'
+            model_dp.mkdir(parents=True, exist_ok=True)
+            
+            all_df = range_kind(surface, volume, threshold)
+            
+            all_tmp = all_df.copy()
+            all_tmp['Residue1'] = all_tmp['Residue1'].str.replace('-', '')
+            all_tmp['Residue1'] = all_tmp['Residue1'].str.replace(';', '_')
+            all_tmp['Residue2'] = all_tmp['Residue2'].str.replace('-', '')
+            all_tmp['Residue2'] = all_tmp['Residue2'].str.replace(';', '_')
+            
+            Residues = dict(list(all_df.groupby('Residue1')))
+            Results  = dict(list(all_tmp.groupby('Residue1')))
+            
+            res_df = summary(dihedral_angle, Residues)
+            
+            if compress:
+                all_tmp.to_csv(model_dp / f'_ALL_{name}.gz', compression='gzip', index=0)
+                res_df.to_csv(model_dp / f'_SUM_{name}.gz', compression='gzip', index=0)
+                for res in Results:
+                    Results[res].to_csv(model_dp / f'{res}.gz', compression='gzip', index=0)
+            else:
+                all_tmp.to_csv(model_dp / f'_ALL_{name}.csv', index=0)
+                res_df.to_csv(model_dp / f'_SUM_{name}.csv', index=0)
+                for res in Results:
+                    Results[res].to_csv(model_dp / f'{res}.csv', index=0)
+            
+    make_result()
+    
+    
