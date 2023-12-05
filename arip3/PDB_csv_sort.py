@@ -14,7 +14,7 @@ def range_kind(surface, volume, threshold):
     info_df[['Residue1', 'Atom1', 'Residue2', 'Atom2']] = info_df['Pair'].apply('_'.join).str.split('_', expand=True)
     
     # Add volume, atom type, interaction type
-    info_df['Volume'] = 0
+    info_df['Volume'] = np.nan
     info_df['Range']  = 0
     info_df['Kind']   = 'UNDEF'
     info_df['Dist1']  = info_df['Residue1'].apply(lambda x: int(x.split('-')[0].split(';')[0][1:]))
@@ -22,13 +22,15 @@ def range_kind(surface, volume, threshold):
     info_df['Dist']   = info_df['Dist1'] - info_df['Dist2']
     
     # Match volume
-    Volu = pd.DataFrame(list(volume.items()), columns=['Pair', 'Volume'])
-    info_df = info_df.merge(Volu[['Pair', 'Volume']], on='Pair', how='left')
-    info_df = info_df.rename(columns={'Volume_y': 'Volume'})
+    if volume != {}:
+        info_df['Volume'] = 0
+        Volu = pd.DataFrame(list(volume.items()), columns=['Pair', 'Volume'])
+        info_df = info_df.merge(Volu[['Pair', 'Volume']], on='Pair', how='left')
+        info_df = info_df.rename(columns={'Volume_y': 'Volume'})
     
-    # Some contacts with almost zero volume return null values during calculation, they are invalid data
-    info_df = info_df.dropna(subset=['Volume'])
-    
+        # Some contacts with almost zero volume return null values during calculation, they are invalid data
+        info_df = info_df.dropna(subset=['Volume'])
+     
     # Match interaction type
         # Below are proteins
     info_df['Kind'] = np.where((info_df['Type1'] != 'D') & (info_df['Type1'] != 'R') & # Other interactions of amino acids
@@ -189,20 +191,33 @@ def range_kind(surface, volume, threshold):
     is_list = info_df['Volume'].apply(lambda x: isinstance(x, list))
     if is_list.any() == True:
         tmp_df = info_df.loc[is_list, 'Volume'].apply(pd.Series)
-        tmp_df.columns = ['Volume', 'EDvolume']
+        tmp_df.columns = ['Volume', 'AOWV']
         info_df = pd.concat([info_df.drop(['Volume'], axis=1), tmp_df], axis=1)
 
         all_df = info_df[['Residue1', 'Atom1', 'Type1', 'Residue2', 'Atom2', 'Type2',
-                          'Distance', 'Surface', 'Volume', 'EDvolume', 'Range', 'Kind']]
-        
+                          'Distance', 'Surface', 'Volume', 'AOWV', 'Range', 'Kind']]
+    
     else:
         all_df = info_df[['Residue1', 'Atom1', 'Type1', 'Residue2', 'Atom2', 'Type2',
                           'Distance', 'Surface', 'Volume', 'Range', 'Kind']]
     
     # If screen by threshold
     if threshold is not None:
-        all_df = all_df[(all_df['Surface'] >= threshold[0]) & (all_df['Volume'] >= threshold[1])]
+        if volume != {}:
+            all_df = all_df[(all_df['Surface'] >= threshold[0]) & (all_df['Volume'] >= threshold[1])]
+        else:
+            all_df = all_df[(all_df['Surface'] >= threshold[0])]
     
+    # Sort by chain and sequence
+    all_df_copy = all_df.copy()
+    all_df_copy['Chain1']    = all_df_copy['Residue1'].str[0]
+    all_df_copy['Sequence1'] = all_df_copy['Residue1'].apply(lambda x: int(x.split('-')[0].split(';')[0][1:]))    
+    all_df_copy['Chain2']    = all_df_copy['Residue2'].str[0]
+    all_df_copy['Sequence2'] = all_df_copy['Residue2'].apply(lambda x: int(x.split('-')[0].split(';')[0][1:]))
+    all_df_copy = all_df_copy.sort_values(['Chain1', 'Sequence1', 'Chain2', 'Sequence2'])
+
+    all_df = all_df_copy.drop(columns=['Chain1', 'Sequence1', 'Chain2', 'Sequence2'])
+
     return all_df
 
 
@@ -215,13 +230,13 @@ def summary(dihedral_angle, Residues):
     sum_df['Psi']        = EMPTY.copy()
     sum_df['Cova_BSA']   = EMPTY.copy()
     sum_df['Cova_Volu']  = EMPTY.copy()
-    sum_df['Cova_EDV']   = np.nan # Add first, if not available, delete later
+    sum_df['Cova_AOWV']   = np.nan # Add first, if not available, delete later
     sum_df['NC_BSA']     = EMPTY.copy()
     sum_df['NC_Volu']    = EMPTY.copy()
-    sum_df['NC_EDV']     = np.nan # Add first, if not available, delete later
+    sum_df['NC_AOWV']     = np.nan # Add first, if not available, delete later
     sum_df['UNDEF_BSA']  = np.nan 
     sum_df['UNDEF_Volu'] = np.nan 
-    sum_df['UNDEF_EDV']  = np.nan # Unknown type of interaction, add first, if not available, delete later
+    sum_df['UNDEF_AOWV']  = np.nan # Unknown type of interaction, add first, if not available, delete later
     
     for i in range(len(sum_df)):
         a_res = sum_df.loc[i]
@@ -246,28 +261,30 @@ def summary(dihedral_angle, Residues):
         UD   = interaction[ interaction['Kind'].isin(['UNDEF'])]
         
         # BSA, Buried Surface Area
-        sum_df.loc[i, 'Cova_BSA']  = np.nansum(Cova['Surface'])
-        sum_df.loc[i, 'Cova_Volu'] = np.nansum(Cova['Volume'])
-        sum_df.loc[i, 'NC_BSA']    = np.nansum(NC['Surface'])
-        sum_df.loc[i, 'NC_Volu']   = np.nansum(NC['Volume'])
+        sum_df.loc[i, 'Cova_BSA'] = np.nansum(Cova['Surface'])
+        sum_df.loc[i, 'NC_BSA']   = np.nansum(NC['Surface'])
+        if 'Volume' in interaction.columns:
+            sum_df.loc[i, 'Cova_Volu'] = np.nansum(Cova['Volume'])
+            sum_df.loc[i, 'NC_Volu']   = np.nansum(NC['Volume'])
         
-        if 'EDvolume' in interaction.columns:
-            sum_df.loc[i, 'Cova_EDV'] = np.nansum(Cova['EDvolume'])
-            sum_df.loc[i, 'NC_EDV']   = np.nansum(NC['EDvolume'])
+        if 'AOWV' in interaction.columns:
+            sum_df.loc[i, 'Cova_AOWV'] = np.nansum(Cova['AOWV'])
+            sum_df.loc[i, 'NC_AOWV']   = np.nansum(NC['AOWV'])
         
         if not UD.empty:
-            sum_df.loc[i, 'UNDEF_BSA']  = np.nansum(UD['Surface'])
-            sum_df.loc[i, 'UNDEF_Volu'] = np.nansum(UD['Volume'])
-            if 'EDvolume' in interaction.columns:
-                sum_df.loc[i, 'UNDEF_EDV']   = np.nansum(UD['EDvolume'])
-            
-    # Round the columns 'Cova_BSA', 'Cova_Volu', 'Cova_EDV', 'NC_BSA', 'NC_Volu', 'NC_EDV',
-    # 'UNDEF_BSA', 'UNDEF_Volu', 'UNDEF_EDV' to three decimal places
-    sum_df[['Cova_BSA',  'Cova_Volu',  'Cova_EDV',
-            'NC_BSA',    'NC_Volu',    'NC_EDV',
-            'UNDEF_BSA', 'UNDEF_Volu', 'UNDEF_EDV']] = sum_df[['Cova_BSA',  'Cova_Volu',  'Cova_EDV',
-                                                               'NC_BSA',    'NC_Volu',    'NC_EDV',
-                                                               'UNDEF_BSA', 'UNDEF_Volu', 'UNDEF_EDV']].round(3)
+            sum_df.loc[i, 'UNDEF_BSA'] = np.nansum(UD['Surface'])
+            if 'Volume' in interaction.columns:
+                sum_df.loc[i, 'UNDEF_Volu'] = np.nansum(UD['Volume'])
+            if 'AOWV' in interaction.columns:
+                sum_df.loc[i, 'UNDEF_AOWV']  = np.nansum(UD['AOWV'])
+           
+    # Round the columns 'Cova_BSA', 'Cova_Volu', 'Cova_AOWV', 'NC_BSA', 'NC_Volu', 'NC_AOWV',
+    # 'UNDEF_BSA', 'UNDEF_Volu', 'UNDEF_AOWV' to three decimal places
+    sum_df[['Cova_BSA',  'Cova_Volu',  'Cova_AOWV',
+            'NC_BSA',    'NC_Volu',    'NC_AOWV',
+            'UNDEF_BSA', 'UNDEF_Volu', 'UNDEF_AOWV']] = sum_df[['Cova_BSA',  'Cova_Volu',  'Cova_AOWV',
+                                                               'NC_BSA',    'NC_Volu',    'NC_AOWV',
+                                                               'UNDEF_BSA', 'UNDEF_Volu', 'UNDEF_AOWV']].round(3)
     
     # Sort by chain and sequence
     sum_df['Chain']    = sum_df['Residue'].str[0]
@@ -286,67 +303,63 @@ def summary(dihedral_angle, Residues):
     return res_df
 
 
-def pdb_csv_sort(idx:int, name:str, dihedral_angle:Angles, surface:Surfaces, volume:Volumes, out_path:Path, threshold:List[float], compress:bool, disable_print=False):
+def pdb_csv_sort(idx:int, name:str, dihedral_angle:Angles, surface:Surfaces, volume:Volumes, out_path:Path, threshold:List[float], compress:bool, each:bool, disable_print=False):
     @timer(disable_print=disable_print)
     def make_result():
         out_dp = out_path / (name+'_z') if compress else out_path / name
         out_dp.mkdir(parents=True, exist_ok=True)
         
+        all_df = range_kind(surface, volume, threshold)
+        all_df = all_df.dropna(axis=1, how='all')
+        
+        all_tmp = all_df.copy()
+        all_tmp['Residue1'] = all_tmp['Residue1'].str.replace('-', '')
+        all_tmp['Residue1'] = all_tmp['Residue1'].str.replace(';', '_')
+        all_tmp['Residue2'] = all_tmp['Residue2'].str.replace('-', '')
+        all_tmp['Residue2'] = all_tmp['Residue2'].str.replace(';', '_')
+
+        Residues = dict(list(all_df.groupby('Residue1')))            
+        res_df = summary(dihedral_angle, Residues)            
+        
         # If there is only one MODEL
         if idx == -1:
-            all_df = range_kind(surface, volume, threshold)
-            
-            all_tmp = all_df.copy()
-            all_tmp['Residue1'] = all_tmp['Residue1'].str.replace('-', '')
-            all_tmp['Residue1'] = all_tmp['Residue1'].str.replace(';', '_')
-            all_tmp['Residue2'] = all_tmp['Residue2'].str.replace('-', '')
-            all_tmp['Residue2'] = all_tmp['Residue2'].str.replace(';', '_')
-            
-            Residues = dict(list(all_df.groupby('Residue1')))
-            Results  = dict(list(all_tmp.groupby('Residue1')))
-            
-            res_df = summary(dihedral_angle, Residues)
-            
             if compress:
                 all_tmp.to_csv(out_dp / f'_ALL_{name}.gz', compression='gzip', index=0)
                 res_df.to_csv(out_dp / f'_SUM_{name}.gz', compression='gzip', index=0)
-                for res in Results:
-                    Results[res].to_csv(out_dp / f'{res}.gz', compression='gzip', index=0)
+                if each:
+                    Results  = dict(list(all_tmp.groupby('Residue1')))
+                    for res in Results:
+                        Results[res].to_csv(out_dp / f'{res}.gz', compression='gzip', index=0)
+
             else:
                 all_tmp.to_csv(out_dp / f'_ALL_{name}.csv', index=0)    # Summary of contacts
                 res_df.to_csv(out_dp / f'_SUM_{name}.csv', index=0)     # Dihedral angles, etc.
-                for res in Results:
-                    Results[res].to_csv(out_dp / f'{res}.csv', index=0) # Each residue
-
+                if each:
+                    Results  = dict(list(all_tmp.groupby('Residue1')))
+                    for res in Results:
+                        Results[res].to_csv(out_dp / f'{res}.csv', index=0)
+                        
         # If there are multiple MODELs
         elif idx >= 0:
             model_dp = out_dp / f'{name}_{idx}'
             model_dp.mkdir(parents=True, exist_ok=True)
             
-            all_df = range_kind(surface, volume, threshold)
-            
-            all_tmp = all_df.copy()
-            all_tmp['Residue1'] = all_tmp['Residue1'].str.replace('-', '')
-            all_tmp['Residue1'] = all_tmp['Residue1'].str.replace(';', '_')
-            all_tmp['Residue2'] = all_tmp['Residue2'].str.replace('-', '')
-            all_tmp['Residue2'] = all_tmp['Residue2'].str.replace(';', '_')
-            
-            Residues = dict(list(all_df.groupby('Residue1')))
-            Results  = dict(list(all_tmp.groupby('Residue1')))
-            
-            res_df = summary(dihedral_angle, Residues)
-            
             if compress:
                 all_tmp.to_csv(model_dp / f'_ALL_{name}.gz', compression='gzip', index=0)
                 res_df.to_csv(model_dp / f'_SUM_{name}.gz', compression='gzip', index=0)
-                for res in Results:
-                    Results[res].to_csv(model_dp / f'{res}.gz', compression='gzip', index=0)
+                if each:
+                    Results  = dict(list(all_tmp.groupby('Residue1')))
+                    for res in Results:
+                        Results[res].to_csv(model_dp / f'{res}.gz', compression='gzip', index=0)
+
             else:
                 all_tmp.to_csv(model_dp / f'_ALL_{name}.csv', index=0)
                 res_df.to_csv(model_dp / f'_SUM_{name}.csv', index=0)
-                for res in Results:
-                    Results[res].to_csv(model_dp / f'{res}.csv', index=0)
-            
+                if each:
+                    Results  = dict(list(all_tmp.groupby('Residue1')))
+                    for res in Results:
+                        Results[res].to_csv(model_dp / f'{res}.csv', index=0)
+                        
     make_result()
     
     

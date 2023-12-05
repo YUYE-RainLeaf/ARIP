@@ -5,11 +5,11 @@ import os
 
 from arip3 import arip_main
 
-def process_file(in_fp, o, ref, dx, t, d, z, disable_print):
+def process_file(in_fp, o, ref, dx, t, w, r, s, z, disable_print):
     try:
         if not disable_print:
             print(f'>> process: {in_fp}, ref: {ref}')
-        arip_main(in_fp, o, ref, dx, t, d, z, disable_print)
+        arip_main(in_fp, o, ref, dx, t, w, r, s, z, disable_print)
     except SystemExit:
         print(f'Error processing file: {in_fp}')
     except:
@@ -24,7 +24,9 @@ if __name__ == '__main__':
     parser.add_argument('-e', action='store_true', help='enhanced precision, use 15092 dots and 0.1 interval as surface and volume')
     parser.add_argument('-c', nargs='*', default=None, type=float, help='surface and volume lower cutoff, two values')
     parser.add_argument('-t', default=os.cpu_count(), type=int, help='number of threads')
-    parser.add_argument('-d', action='store_true', help='use electron-density-based calculation for volume')
+    parser.add_argument('-w', action='store_true', help='use atomic overlapping weighted algorithm for volume')
+    parser.add_argument('-r', action='store_true', help='generate .csv file for every residue')
+    parser.add_argument('-s', action='store_true', help='only calculate surface area')
     parser.add_argument('-z', action='store_true', help='use .gz compressed format save result')
     args = parser.parse_args()
 
@@ -35,9 +37,6 @@ if __name__ == '__main__':
 
     input: Path = args.input
     assert input.is_file() or input.is_dir(), f'{input} is not a valid file or directory'
-
-    in_fps = [input] if input.is_file() else list(input.iterdir())
-    disable_print = False if input.is_file() else True
     
     # Optional threshold, no default
     threshold = args.c
@@ -57,12 +56,22 @@ if __name__ == '__main__':
     # The number of threads should not exceed the number of CPUs. If the user enters a larger number, the number of threads is determined by the number of CPUs.
     num_threads = min(args.t, os.cpu_count())
     
-    # Use the volume algorithm based on electron density
-    density = True if args.d else False
+    # Use atomic overlapping weighted algorithm
+    weighted = True if args.w else False
+    
+    # Save .csv for every residue
+    each = True if args.r else False
+    
+    # Calculate surface area only
+    only = True if args.s else False
     
     # Save the result in .gz compressed format
     compress = True if args.z else False
-
+    
+    # Don't print details for dir
+    in_fps = [input] if input.is_file() else list(input.iterdir())
+    disable_print = False if input.is_file() else True
+    
     # Create output directory
     output_dir = args.o.resolve()
     print(output_dir)
@@ -70,7 +79,8 @@ if __name__ == '__main__':
 
     with ThreadPoolExecutor(max_workers=num_threads) as executor:
         executor.map(process_file, in_fps, [args.o]*len(in_fps), [args.ref]*len(in_fps),
-                     [args.dx]*len(in_fps), [threshold]*len(in_fps), [density]*len(in_fps),
+                     [args.dx]*len(in_fps), [threshold]*len(in_fps),
+                     [weighted]*len(in_fps), [each]*len(in_fps), [only]*len(in_fps),
                      [compress]*len(in_fps), [disable_print]*len(in_fps))
         
         

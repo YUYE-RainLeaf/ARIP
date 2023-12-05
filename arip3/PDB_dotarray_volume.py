@@ -50,7 +50,7 @@ def count_points(atom_contacts:Points, atom_centers:Dict[Tuple[str, float], Poin
     return atom_counts
 
 
-def determine_inner(a_pair:Tuple[str, str], a_pair_xyz:Dict[str, Point], a_pair_info:Dict[str, float], density:bool, interval:float=0.2) -> Tuple[dict, dict]:
+def determine_inner(a_pair:Tuple[str, str], a_pair_xyz:Dict[str, Point], a_pair_info:Dict[str, float], weighted:bool, interval:float=0.2) -> Tuple[dict, dict]:
     volume_pair = {}
     xyz = {}
     atom1, atom2 = a_pair
@@ -128,7 +128,7 @@ def determine_inner(a_pair:Tuple[str, str], a_pair_xyz:Dict[str, Point], a_pair_
     if volume == 0: return {}
     
         # Atomic Overlap Weighted Algorithm
-    if density: 
+    if weighted: 
         edvolu: DTYPE = (1 + atom1_counts).sum() # +1 is because the atom itself is not counted
         edvolume = rnd(edvolu * a_point)
         
@@ -143,53 +143,9 @@ def determine_inner(a_pair:Tuple[str, str], a_pair_xyz:Dict[str, Point], a_pair_
     return volume_pair
 
 
-def pdb_dotarray_volume(atom_df:DataFrame, density:bool, interval:float=0.2, disable_print=False):
+def pdb_dotarray_volume(contact_dict:dict, contacts_center:dict, contacts_dict:dict, weighted:bool, interval:float=0.2, disable_print=False):
     @timer(disable_print=disable_print)
     def count_volume():
-        # Atom names and radius information
-        atoms: Series = atom_df['Residue'] + '_' + atom_df['Atom']
-        radii = np.asarray(atom_df['R'])
-        
-        # Coordinate array
-        atom_coords: Points = np.stack([
-            atom_df['x'].array,    # [N], DTYPE
-            atom_df['y'].array,
-            atom_df['z'].array,
-        ], axis=-1)                # [N, D=3], DTYPE
-        
-        atom_df['Name'] = atoms
-        contacts_center = {i: j for i, j in zip(atoms, atom_coords)}
-        contacts_dict = atom_df.set_index('Name')['R'].to_dict()
-        
-        try:
-            # Calculate the distance between all atoms
-            dists = np.linalg.norm(atom_coords[:, np.newaxis] - atom_coords, axis=2)
-        except MemoryError:
-            # There may be insufficient memory, so skip this file
-            size = atom_coords.shape[0]
-            bytes_per_float = np.dtype(float).itemsize
-            required_memory_GB = size * size * 3 * bytes_per_float / (1024 ** 3)
-            print(f'Required memory: {required_memory_GB} GB. ', end='')
-            return {}, {}
-
-        # Create a dictionary, the key is the atom name, and the value is a list of all atom names in contact with this atom
-        # >0.00001 is to remove the atom itself, because the distance from itself to itself is 0
-        eps = 0.00001
-        contact_map = {
-            atom1: atoms[(dists[i] > eps) & (dists[i] < radii[i] + radii)]
-                for i, (atom1, radius) in enumerate(zip(atoms, radii))
-        }
-        
-        contact_dict = {} # Build into atom pairs
-        for key, values in contact_map.items():
-            key_residue = key.split('_')[0]
-            for value in values:
-                value_residue = value.split('_')[0]
-                if key_residue != value_residue:
-                    new_key = (key, value)
-                    new_values = list(values) + [key]
-                    contact_dict[new_key] = new_values
-        
         Pairs_Volume = []
         for a_pair in tqdm(contact_dict, disable=disable_print):
             # A pair of atoms, and all atoms in contact with them
@@ -197,13 +153,13 @@ def pdb_dotarray_volume(atom_df:DataFrame, density:bool, interval:float=0.2, dis
             a_pair_xyz  = {name: contacts_center[name] for name in a_contact_dict if name in contacts_center}   # Coordinates
             a_pair_info = {name: contacts_dict  [name] for name in a_contact_dict if name in contacts_dict  }   # Radius, volume
             
-            volume_pair = determine_inner(a_pair, a_pair_xyz, a_pair_info, density, interval)
+            volume_pair = determine_inner(a_pair, a_pair_xyz, a_pair_info, weighted, interval)
             Pairs_Volume.append(volume_pair)
         
         volume = {} # Use update() to quickly merge dictionaries
         for pair in Pairs_Volume:
             volume.update(pair)
 
-        return contact_dict, volume
+        return volume
     
     return count_volume()

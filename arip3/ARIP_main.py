@@ -169,7 +169,7 @@ def parse_atom_model(atom_model:AtomModel, disable_print=False) -> DataFrame:
 
 
 @timer_s
-def arip_analyze(idx:int, name:str, atom_model:List[str], interval:float, ref_fp:Path, out_dp:Path, threshold:List[float], density:bool, compress:bool, disable_print=False):
+def arip_analyze(idx:int, name:str, atom_model:List[str], interval:float, ref_fp:Path, out_dp:Path, threshold:List[float], weighted:bool, each:bool, only:bool, compress:bool, disable_print=False):
     # Load data
     aa_df, nt_df, ns_df = parse_atom_model(atom_model, disable_print)
     
@@ -181,13 +181,60 @@ def arip_analyze(idx:int, name:str, atom_model:List[str], interval:float, ref_fp
     
     atom_df = pd.concat([aa_df, nt_df, ns_df], axis=0)
     
-    # Different precision, different number of points. Calculate contact volume
-    contact_dict, volume = pdb_dotarray_volume(atom_df, density, interval, disable_print)
+    # Atom names and radius information
+    atoms: Series = atom_df['Residue'] + '_' + atom_df['Atom']
+    radii = np.asarray(atom_df['R'])
     
+    # Coordinate array
+    atom_coords: Points = np.stack([
+        atom_df['x'].array,    # [N], DTYPE
+        atom_df['y'].array,
+        atom_df['z'].array,
+    ], axis=-1)                # [N, D=3], DTYPE
+    
+    atom_df['Name'] = atoms
+    contacts_center = {i: j for i, j in zip(atoms, atom_coords)}
+    contacts_dict = atom_df.set_index('Name')['R'].to_dict()
+    
+    try:
+        # Calculate the distance between all atoms
+        dists = np.linalg.norm(atom_coords[:, np.newaxis] - atom_coords, axis=2)
+    except MemoryError:
+        # There may be insufficient memory, so skip this file
+        size = atom_coords.shape[0]
+        bytes_per_float = np.dtype(float).itemsize
+        required_memory_GB = size * size * 3 * bytes_per_float / (1024 ** 3)
+        print(f'Required memory: {required_memory_GB} GB. ', end='')
+        return {}, {}
+
+    # Create a dictionary, the key is the atom name, and the value is a list of all atom names in contact with this atom
+    # >0.00001 is to remove the atom itself, because the distance from itself to itself is 0
+    eps = 0.00001
+    contact_map = {
+        atom1: atoms[(dists[i] > eps) & (dists[i] < radii[i] + radii)]
+            for i, (atom1, radius) in enumerate(zip(atoms, radii))
+    }
+    
+    contact_dict = {} # Build into atom pairs
+    for key, values in contact_map.items():
+        key_residue = key.split('_')[0]
+        for value in values:
+            value_residue = value.split('_')[0]
+            if key_residue != value_residue:
+                new_key = (key, value)
+                new_values = list(values) + [key]
+                contact_dict[new_key] = new_values
+               
     # If memory is insufficient, skip the current file
-    if not contact_dict and not volume:
+    if not contact_dict:
         print(f'Skipping file {name} due to insufficient memory or no valid atoms')
         return -1, -1 # Indicates memory shortage error
+    
+    # Different precision, different number of points. Calculate contact volume
+    if only:
+        volume = {}
+    else:
+        volume = pdb_dotarray_volume(contact_dict, contacts_center, contacts_dict, weighted, interval, disable_print)
     
     # Delete unnecessary columns
     contact_df = atom_df[['Name', 'x', 'y', 'z', 'R', 'Surf', 'Type']]
@@ -196,9 +243,9 @@ def arip_analyze(idx:int, name:str, atom_model:List[str], interval:float, ref_fp
     surface = pdb_dotarray_surface(ref_fp, contact_df, contact_dict, disable_print)
     
     # Organize data and determine contact type
-    pdb_csv_sort(idx, name, dihedral_angle, surface, volume, out_dp, threshold, compress, disable_print)
+    pdb_csv_sort(idx, name, dihedral_angle, surface, volume, out_dp, threshold, compress, each, disable_print)
 
-def arip_main(in_fp:Path, out_dp:Path, ref_fp:Path, interval:float, threshold:List[float], density:bool, compress:bool, disable_print=False):
+def arip_main(in_fp:Path, out_dp:Path, ref_fp:Path, interval:float, threshold:List[float], weighted:bool, each:bool, only:bool, compress:bool, disable_print=False):
     name = Path(in_fp.stem).stem # Use stem twice because the compressed file needs to remove the .pdb suffix again
     a_models = load_atom_models(name, in_fp)
     
@@ -209,11 +256,12 @@ def arip_main(in_fp:Path, out_dp:Path, ref_fp:Path, interval:float, threshold:Li
                 else:         print(f'Skipping file {name}_MODEL_{idx} due to no valid atoms')
                 
             else:
-                t = arip_analyze(idx, name, a_model, interval, ref_fp, out_dp, threshold, density, compress, disable_print)
+                t = arip_analyze(idx, name, a_model, interval, ref_fp, out_dp, threshold, weighted, each, only, compress, disable_print)
                 
                 if isinstance(t, float): # If there is a memory shortage error, then t is a tuple containing 3 elements, the last two are -1. If there is no error, t is a floating point number
                     if idx == -1: print(f'The PDB {name} run OK, time cost: {t:.3f}s')
                     else:         print(f'The PDB {name}_MODEL_{idx} run OK, time cost: {t:.3f}s')
+    
     except:
         print(f'The file {name} cannot be analyzed, perhaps it contains unsupported format, or no valid atoms')
 

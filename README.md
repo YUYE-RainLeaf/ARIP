@@ -37,25 +37,30 @@ Supports most non-standard residues and ligands.
   - If the -t parameter is not specified, or the number of threads entered is greater than the number of CPUs, multithreading will be set automatically according to the number of CPUs
   
 - Calculate volume based on atomic overlap weighted algorithm
-  - `python3 run.py your/file/or/dir -d`
+  - `python3 run.py your/file/or/dir -w`
   - The more overlapping atoms, the greater the volume weight
   - Specifically, the volume represented by each point is multiplied by the number of atoms that contain this point, and if it is located in N atoms at the same time, it will be ×N
   
 - Save the output results in .gz compressed format to save storage space
   - `python3 run.py your/file/or/dir -z`
   - The created folder name will have a '_z' suffix to distinguish it
-  
+
+- Output .csv file for each residue
+  - `python3 run.py your/file/or/dir -r`
+  - This may consume storage space and reduce write speed during large-scale runs
+
+- Calculate only surface area and other parameters, excluding volume
+  - `python3 run.py your/file/or/dir -s`
+  - This can be used when volume values are not required, significantly improving speed 
+
 ### Output Style
 
 ##### Folder
 - For each successfully analyzed PDB file, a new folder with the same name will be created to store the analysis results
 - If the PDB file contains multiple MODELs, subfolders will be created under the same name folder to store them separately
 
-##### Residue Information
-- Each residue has a corresponding CSV file, named with chain + position + residue abbreviation. If it is a non-standard residue, the residue abbreviation will be preceded by '_'
-- The file contains contact information for each atom, including atom type, contact distance, surface, volume, etc.
-
 ##### Interaction Types
+
 - Protein
   - Non-covalent interaction (NC, Non-Covalent)
 	- HB: Hydrogen Bond
@@ -78,11 +83,11 @@ Supports most non-standard residues and ligands.
 - Other
   - BSA: Buried Surface Area, that is, the sum of the contact surface of each atom in the residue
   - Volu: Volume, contact volume
-  - EDV: Electron-Density-Weighted Volume, based on electron density weighted volume
+  - AOWV: Atomic Overlap Weighted Volume
   - UNDEF: Undefined, interactions related to non-standard residues that have not been judged
 
 ##### Summary Information
-- Files starting with '_ALL' contain all atom-atom contact information
+- Files starting with '_ALL' contain all atom-atom contact information, including atom type, contact distance, surface, volume, etc.
 - Files starting with '_SUM' contain each residue's dihedral angles (proteins only), covalent and non-covalent BSA and contact volume, etc.
 
 ##### Success Information
@@ -128,4 +133,4 @@ Email: xiangtao312@outlook.com
 WeChat: Communist21
 
 ----
-2023/10/30
+2023/11/08
