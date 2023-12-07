@@ -122,15 +122,25 @@ Supports most non-standard residues and ligands.
 - Provides a simple function to visualize the spatial position of heavy atoms
   - `python3 vis.py your/file`
   
-- Supports input of PDB files or XYZ files
-  - PDB files, both compressed and uncompressed are acceptable, with or without suffix
-  - Does not support input of paths
-  - For PDB containing multiple MODELs, pictures of each MODEL can be output
-  - If an unsupported format is input, it will output `unsupported file: {name}`
+  - Supports input of PDB files or XYZ files
+    - PDB files, both compressed and uncompressed are acceptable, with or without suffix
+    - Does not support input of paths
+    - For PDB containing multiple MODELs, pictures of each MODEL can be output
+    - If an unsupported format is input, it will output `unsupported file: {name}`
+
+- For structures that have been analyzed, heatmaps of residue contacts can be drawn for PDBs with multiple models
+  - `python3 heatmap.py your/dir column`
+  - The input path should contain the ARIP analysis results
+    - Only applicable to PDBs with multiple models
+    - The input column is the column you wish to plot in the heatmap, generally one or more of the following:
+      - Surface_max, Surface_min, Surface_range, Surface_mean, Surface_rmsd, Surface_cv, Volume_max, Volume_min, Volume_range, Volume_mean, Volume_rmsd, Volume_cv, AOWV_max, AOWV_min, AOWV_range, AOWV_mean, AOWV_rmsd, AOWV_cv
+      - If no input column, a heatmap will be drawn for each column by default
+    - The x-axis and y-axis of the heatmap are arranged in the order of the residues, starting from A1.
+    - If an unsupported format is input, it will output `The heatmap could not be successfully generated due to an error`  
   
 ### Contact me
 Email: xiangtao312@outlook.com
 WeChat: Communist21
 
 ----
-2023/11/08
+2023/12/07
