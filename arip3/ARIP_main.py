@@ -13,6 +13,8 @@ from .PDB_csv_sort import pdb_csv_sort
 from .utils import timer_s, die
 from .typing import *
 
+import math
+pi = math.pi
 
 def load_atom_models(name, fp:Path) -> List[Tuple[int, AtomModel]]:
     # Determine if it is a compressed file
@@ -70,7 +72,7 @@ def load_atom_models(name, fp:Path) -> List[Tuple[int, AtomModel]]:
     return a_models
 
 
-def parse_atom_model(atom_model:AtomModel, disable_print=False) -> DataFrame:
+def parse_atom_model(atom_model:AtomModel, distance, disable_print=False) -> DataFrame:
     # Create a dictionary to convert to DataFrame
     atom_info = {
         'Chain':   [],      # str
@@ -104,27 +106,52 @@ def parse_atom_model(atom_model:AtomModel, disable_print=False) -> DataFrame:
                 __ = Radius[Res][Ana]
                 atom_info['R']   .append(__[0])
                 atom_info['Type'].append(__[1])
-                atom_info['Surf'].append(__[2])
-                atom_info['Volu'].append(__[3])
+                if distance == None:
+                    atom_info['Surf'].append(__[2])
+                    atom_info['Volu'].append(__[3])
+                else:
+                    new_r = __[0] + distance
+                    new_s = 4 * pi * (new_r)**2
+                    new_v = 4 * (pi * (new_r)**3) / 3
+                    atom_info['Surf'].append(new_s)
+                    atom_info['Volu'].append(new_v)
+                    
             if Res in NT and Ana[0] in Radius[Res]: # Nucleotide
                 __ = Radius[Res][Ele]
                 atom_info['R']   .append(__[0])
                 atom_info['Type'].append(__[1])
-                atom_info['Surf'].append(__[2])
-                atom_info['Volu'].append(__[3])
+                if distance == None:
+                    atom_info['Surf'].append(__[2])
+                    atom_info['Volu'].append(__[3])
+                else:
+                    new_r = __[0] + distance
+                    new_s = 4 * pi * (new_r)**2
+                    new_v = 4 * (pi * (new_r)**3) / 3
+                    atom_info['Surf'].append(new_s)
+                    atom_info['Volu'].append(new_v)
         
         # Non-standard residue
         else:
             __ = Radius['UNDEF'][Ele]
             atom_info['R']   .append(__[0])
             atom_info['Type'].append(__[1])
-            atom_info['Surf'].append(__[2])
-            atom_info['Volu'].append(__[3])   
+            if distance == None:
+                atom_info['Surf'].append(__[2])
+                atom_info['Volu'].append(__[3])
+            else:
+                new_r = __[0] + distance
+                new_s = 4 * pi * (new_r)**2
+                new_v = 4 * (pi * (new_r)**3) / 3
+                atom_info['Surf'].append(new_s)
+                atom_info['Volu'].append(new_v) 
 
     atom_df = pd.DataFrame.from_dict(atom_info)
 
     # NOTE: Add the radius of the water molecule
-    atom_df['R'] += Radius_H2O
+    if distance == None:
+        atom_df['R'] += Radius_H2O
+    else:
+        atom_df['R'] += distance
     
     for col in atom_df.columns:
         if is_numeric_dtype(atom_df[col]): # Convert all values to np.float64 type
@@ -169,9 +196,9 @@ def parse_atom_model(atom_model:AtomModel, disable_print=False) -> DataFrame:
 
 
 @timer_s
-def arip_analyze(idx:int, name:str, atom_model:List[str], interval:float, ref_fp:Path, out_dp:Path, threshold:List[float], weighted:bool, each:bool, only:bool, compress:bool, disable_print=False):
+def arip_analyze(idx:int, name:str, atom_model:List[str], interval:float, ref_fp:Path, out_dp:Path, threshold:List[float], distance:float, weighted:bool, each:bool, only:bool, compress:bool, disable_print=False):
     # Load data
-    aa_df, nt_df, ns_df = parse_atom_model(atom_model, disable_print)
+    aa_df, nt_df, ns_df = parse_atom_model(atom_model, distance, disable_print)
     
     pdb_file = StringIO(''.join(atom_model))
     # Calculate dihedral angles only for protein
@@ -245,7 +272,7 @@ def arip_analyze(idx:int, name:str, atom_model:List[str], interval:float, ref_fp
     # Organize data and determine contact type
     pdb_csv_sort(idx, name, dihedral_angle, surface, volume, out_dp, threshold, compress, each, disable_print)
 
-def arip_main(in_fp:Path, out_dp:Path, ref_fp:Path, interval:float, threshold:List[float], weighted:bool, each:bool, only:bool, compress:bool, disable_print=False):
+def arip_main(in_fp:Path, out_dp:Path, ref_fp:Path, interval:float, threshold:List[float], distance:float, weighted:bool, each:bool, only:bool, compress:bool, disable_print=False):
     name = Path(in_fp.stem).stem # Use stem twice because the compressed file needs to remove the .pdb suffix again
     a_models = load_atom_models(name, in_fp)
     
@@ -256,12 +283,12 @@ def arip_main(in_fp:Path, out_dp:Path, ref_fp:Path, interval:float, threshold:Li
                 else:         print(f'Skipping file {name}_MODEL_{idx} due to no valid atoms')
                 
             else:
-                t = arip_analyze(idx, name, a_model, interval, ref_fp, out_dp, threshold, weighted, each, only, compress, disable_print)
+                t = arip_analyze(idx, name, a_model, interval, ref_fp, out_dp, threshold, distance, weighted, each, only, compress, disable_print)
                 
                 if isinstance(t, float): # If there is a memory shortage error, then t is a tuple containing 3 elements, the last two are -1. If there is no error, t is a floating point number
                     if idx == -1: print(f'The PDB {name} run OK, time cost: {t:.3f}s')
                     else:         print(f'The PDB {name}_MODEL_{idx} run OK, time cost: {t:.3f}s')
-    
+
     except:
         print(f'The file {name} cannot be analyzed, perhaps it contains unsupported format, or no valid atoms')
 

@@ -28,10 +28,15 @@ Supports most non-standard residues and ligands.
   - `python3 run.py your/file/or/dir -e`
   
 - Use the lower cutoff, contacts with area and volume less than the cutoff will be discarded. The default is 0.5 and 0.2
-  - `python3 run.py your/file/or/dir -c # Contacts with area less than 0.5 and volume less than 0.2 will be discarded`
-  - `python3 run.py your/file/or/dir -c 1.0 0.5# Contacts with area less than 1.0 and volume less than 0.5 will be discarded`
+  - `python3 run.py your/file/or/dir -c` # Contacts with area less than 0.5 and volume less than 0.2 will be discarded
+  - `python3 run.py your/file/or/dir -c 1.0 0.5` # Contacts with area less than 1.0 and volume less than 0.5 will be discarded
   - Note, this will apply to all proteins, nucleic acids, non-standard residues, and ligands
-  
+
+- Use a custom distance to determine whether two atoms are in contact. Contact is determined when the minimum distance between two atoms is less than the custom distance. The default is 0
+- `python3 run.py your/file/or/dir -d` # Contact is determined when the minimum distance between two atoms is less than 0
+- `python3 run.py your/file/or/dir -d 0.5` # Contact is determined when the minimum distance between two atoms is less than 0.5
+- The minimum distance refers to the smallest distance between two atoms when they are considered as spheres with their vdW
+
 - Custom multithreading quantity
   - `python3 run.py your/file/or/dir -t threads_number`
   - If the -t parameter is not specified, or the number of threads entered is greater than the number of CPUs, multithreading will be set automatically according to the number of CPUs
