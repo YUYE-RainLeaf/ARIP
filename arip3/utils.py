@@ -26,7 +26,7 @@ def timer_s(fn:Callable[[Any], Tuple[float, ...]]):
         s = time()
         r = fn(*args, **kwargs)
         t = time()
-        if r: return (t - s), *r
+        if r: return (t - s,) + tuple(r)
         else: return (t - s)
     return wrapper
 

@@ -9,6 +9,7 @@ Supports most non-standard residues and ligands.
 
 ### Getting Started
 
+- Ensure your Python version is 3.6 or higher. You can check your Python version by running `python --version`
 - Download and use immediately
   - `pip install -r requirements.txt`
   - `python3 run.py your/file/or/dir`
@@ -148,4 +149,4 @@ Email: xiangtao312@outlook.com
 WeChat: Communist21
 
 ----
-2023/12/07
+2023/12/26
