@@ -251,8 +251,8 @@ def summary(dihedral_angle, Residues):
             phi, psi = None, None
         
         # Convert to degrees or set to Nan
-        sum_df.loc[i, 'Phi'] = np.nan if phi is None else f'{math.degrees(phi):.3f}'
-        sum_df.loc[i, 'Psi'] = np.nan if psi is None else f'{math.degrees(psi):.3f}'
+        sum_df.loc[i, 'Psi'] = np.nan if psi is None else round(math.degrees(psi), 3)
+        sum_df.loc[i, 'Phi'] = np.nan if phi is None else round(math.degrees(phi), 3)
         
         # Non-covalent and covalent interaction surface and volume
         interaction = Residues[a_res['Residue']]

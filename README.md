@@ -42,6 +42,15 @@ Supports most non-standard residues and ligands.
   - `python3 run.py your/file/or/dir -t threads_number`
   - If the -t parameter is not specified, or the number of threads entered is greater than the number of CPUs, multithreading will be set automatically according to the number of CPUs
   
+- Calculate area and volume according to the algorithm of hydrophilic atoms interactions mediated by water molecule
+  - `python3 run.py your/file/or/dir -p`
+  - This mode only calculates atom pairs where at least one atom is N, O, P, or S, with the nearest distance between two atoms > 0 and < 2.8
+  - The maximum embedding depths for N, O, P, and S are 0.1, 0.2, 0.3, and 0.5, respectively. If exceeded, it will automatically be corrected to these thresholds
+  - If only one of the two atoms is N, O, P, or S, the calculated area and volume are the contact area and volume of that atom with one water molecule
+  - If both atoms are N, O, P, or S, the calculated area and volume are the average of the contact areas and volumes of these two atoms with one water molecule each
+  - Since the values are usually small, this mode further increases the number of points in the volume calculation grid to achieve higher accuracy
+  - In this mode, custom distance criteria for determining contact between two atoms cannot be used, and the effect of multiple atoms in contact at the same time will not be considered
+  
 - Calculate volume based on atomic overlap weighted algorithm
   - `python3 run.py your/file/or/dir -w`
   - The more overlapping atoms, the greater the volume weight
@@ -149,4 +158,4 @@ Email: xiangtao312@outlook.com
 WeChat: Communist21
 
 ----
-2023/12/26
+2024/02/01

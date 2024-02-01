@@ -50,7 +50,7 @@ def count_points(atom_contacts:Points, atom_centers:Dict[Tuple[str, float], Poin
     return atom_counts
 
 
-def determine_inner(a_pair:Tuple[str, str], a_pair_xyz:Dict[str, Point], a_pair_info:Dict[str, float], weighted:bool, interval:float=0.2) -> Tuple[dict, dict]:
+def determine_inner(a_pair:Tuple[str, str], a_pair_xyz:Dict[str, Point], a_pair_info:Dict[str, float], polar:bool, weighted:bool, interval:float=0.2) -> Tuple[dict, dict]:
     volume_pair = {}
     xyz = {}
     atom1, atom2 = a_pair
@@ -74,13 +74,6 @@ def determine_inner(a_pair:Tuple[str, str], a_pair_xyz:Dict[str, Point], a_pair_
     S  = DTYPE(centers[atom2][0])    # The distance between the two atoms (but it may be a negative value, depending on the direction of rotation)
     
     # Determine the range of the point array
-    if S > 0:
-        x_max = 0 + R1
-        x_min = S - R2
-    elif S < 0:
-        x_max = S + R2
-        x_min = 0 - R1
-    
     if R1 >= R2:
         y_max = + R1
         y_min = - R1
@@ -92,6 +85,91 @@ def determine_inner(a_pair:Tuple[str, str], a_pair_xyz:Dict[str, Point], a_pair_
         z_max = + R2
         z_min = - R2
 
+    # x3 and x4 are the central coordinates of two hypothetical water molecules. x4 is not necessarily used and is only assumed to exist, different from x3, when atom2 is a hydrophilic atom and the embedding of x3 into atom1 exceeds the threshold
+    x4 = False
+    if polar:
+        atom1_type = atom1.split('_')[1][0]
+        atom2_type = atom2.split('_')[1][0] # Select different embedding depths by determining whether atom2 is a hydrophilic atom.
+
+        if atom2_type in ['N', 'O', 'P', 'S']:
+            R3 = 1.4
+            R4 = R2
+            if S > 0:
+                x3 = (S + R1 - R2) / 2 # Coordinates of the mediating water molecule
+                depth  = R1 - (x3 - 1.4) # Embedding depths
+                
+                # The maximum embedding depths for N, O, P, and S are 0.1, 0.2, 0.3, and 0.5
+                if   atom1_type == 'N' and depth > 0.1: x3 = R1 + 1.4 - 0.1
+                elif atom1_type == 'O' and depth > 0.2: x3 = R1 + 1.4 - 0.2
+                elif atom1_type == 'P' and depth > 0.3: x3 = R1 + 1.4 - 0.3
+                elif atom1_type == 'S' and depth > 0.5: x3 = R1 + 1.4 - 0.5
+                    
+                depth2 = x3 + 1.4 - (S - R2)
+                x4 = S - R2 - 1.4 + 0.1 if (atom2_type == 'N' and depth2 > 0.1) else x3
+                x4 = S - R2 - 1.4 + 0.2 if (atom2_type == 'O' and depth2 > 0.2) else x3
+                x4 = S - R2 - 1.4 + 0.3 if (atom2_type == 'P' and depth2 > 0.3) else x3
+                x4 = S - R2 - 1.4 + 0.5 if (atom2_type == 'S' and depth2 > 0.5) else x3
+                
+            elif S < 0:
+                x3 = (S - R1 + R2) / 2
+                depth = R1 - (-x3 - 1.4)
+                
+                if   atom1_type == 'N' and depth > 0.1: x3 = -R1 - 1.4 + 0.1
+                elif atom1_type == 'O' and depth > 0.2: x3 = -R1 - 1.4 + 0.2
+                elif atom1_type == 'P' and depth > 0.3: x3 = -R1 - 1.4 + 0.3
+                elif atom1_type == 'S' and depth > 0.5: x3 = -R1 - 1.4 + 0.5
+                
+                depth2 = S + R2 - (x3 - 1.4)
+                x4 = S + R2 + 1.4 - 0.1 if (atom2_type == 'N' and depth2 > 0.1) else x3
+                x4 = S + R2 + 1.4 - 0.2 if (atom2_type == 'O' and depth2 > 0.2) else x3
+                x4 = S + R2 + 1.4 - 0.3 if (atom2_type == 'P' and depth2 > 0.3) else x3
+                x4 = S + R2 + 1.4 - 0.5 if (atom2_type == 'S' and depth2 > 0.5) else x3
+
+            two_center2 = np.asarray([centers[atom2], [x4, 0, 0]])
+
+        else:
+            if S > 0:
+                x3 = (S - R2 - 1.4)
+                depth = R1 - (x3 - 1.4)
+                if   atom1_type == 'N' and depth > 0.1: x3 = R1 + 1.4 - 0.1
+                elif atom1_type == 'O' and depth > 0.2: x3 = R1 + 1.4 - 0.2
+                elif atom1_type == 'P' and depth > 0.3: x3 = R1 + 1.4 - 0.3
+                elif atom1_type == 'S' and depth > 0.5: x3 = R1 + 1.4 - 0.5
+                        
+            elif S < 0:
+                x3 = (S + R2 + 1.4)
+                depth = R1 - (-x3 - 1.4)
+                if   atom1_type == 'N' and depth > 0.1: x3 = -R1 - 1.4 + 0.1
+                elif atom1_type == 'O' and depth > 0.2: x3 = -R1 - 1.4 + 0.2
+                elif atom1_type == 'P' and depth > 0.3: x3 = -R1 - 1.4 + 0.3
+                elif atom1_type == 'S' and depth > 0.5: x3 = -R1 - 1.4 + 0.5
+        
+        if S > 0:
+            x_max = 0 + R1
+            x_min = x3 - 1.4
+            if x4:
+                x_max2 = x4 + 1.4
+                x_min2 = S - R2
+        elif S < 0 :
+            x_max = x3 + 1.4
+            x_min = 0 - R1
+            if x4:
+                x_max2 = S + R2
+                x_min2 = x4 - 1.4
+        # Define the mediating water molecule as atom2
+        R2 = 1.4
+        # Coordinates of atom1 and atom2
+        two_center = np.asarray([centers[atom1], [x3, 0, 0]])
+    
+    else:
+        if S > 0:
+            x_max = 0 + R1
+            x_min = S - R2
+        elif S < 0:
+            x_max = S + R2
+            x_min = 0 - R1
+        two_center = np.asarray([centers[atom1], centers[atom2]])    
+    
     # Calculate the volume and number of points in the point array, +0.1 is to avoid points too close to the edge being inaccurate
     eps = 0.1
     cube_volu: DTYPE = rnd((x_max - x_min + eps) * (y_max - y_min + eps) * (z_max - z_min + eps), 9)
@@ -105,45 +183,66 @@ def determine_inner(a_pair:Tuple[str, str], a_pair_xyz:Dict[str, Point], a_pair_
     points: Points = gen_points(x_range, y_range, z_range, interval=interval)
     if points is None: return {}
     
-    # Coordinates of atom1 and atom2
-    two_center = np.asarray([centers[atom1], centers[atom2]])
-    
     # Distance from the point array to atom1 and atom2
     dists = np.linalg.norm(points[:, np.newaxis] - two_center, axis=2)
     
     # Points within atom1 and atom2
     in_contact = points[(dists[:, 0] <= R1) & (dists[:, 1] <= R2)]
     atom1_centers = {(c, a_pair_info[c]): centers[c] for c in centers} ; del atom1_centers[(atom1, a_pair_info[atom1])]
+    if polar:
+        atom1_centers = {(atom2, 1.4): np.asarray([x3, 0, 0])}
     atom1_counts = count_points(in_contact, atom1_centers)
 
     # The volume represented by each point
     a_point = cube_volu / len(points)
     
     # Finally calculate the contact volume
-        # Ordinary calculation
-    volu: DTYPE = (1 / atom1_counts).sum() # No need to +1, just manage the number of contacts with other atoms
+    # Ordinary calculation
+    non_zero_counts = atom1_counts[atom1_counts != 0]
+    volu: DTYPE = (1 / non_zero_counts).sum() # No need to +1, just manage the number of contacts with other atoms
     volume = rnd(volu * a_point)
     
     # If the last three digits after the decimal point are all 0, ignore it
     if volume == 0: return {}
-    
-        # Atomic Overlap Weighted Algorithm
+    if x4: # The volume is the average of the contact volumes of atom1 and atom2 with the water molecule, respectively
+        cube_volu2: DTYPE = rnd((x_max2 - x_min2 + eps) * (y_max - y_min + eps) * (z_max - z_min + eps), 9)
+        x_range2 = (rnd(x_min2 - eps / 2), rnd(x_max2 + eps / 2))  
+        points2: Points = gen_points(x_range2, y_range, z_range, interval=interval)
+        if points2 is None: return {}
+        dists2 = np.linalg.norm(points2[:, np.newaxis] - two_center2, axis=2)
+        in_contact2 = points2[(dists2[:, 0] <= R4) & (dists2[:, 1] <= R3)]
+        atom1_centers2 = {(atom1, 1.4): np.asarray([x4, 0, 0])}
+        atom1_counts2 = count_points(in_contact2, atom1_centers2)
+        a_point2 = cube_volu2 / len(points2)
+        non_zero_counts2 = atom1_counts2[atom1_counts2 != 0]
+        volu2: DTYPE = (1 / non_zero_counts2).sum()
+        volume2 = rnd(volu2 * a_point2)
+        volume = (volume + volume2) / 2
+        
+    # Atomic Overlap Weighted Algorithm
     if weighted: 
         edvolu: DTYPE = (1 + atom1_counts).sum() # +1 is because the atom itself is not counted
         edvolume = rnd(edvolu * a_point)
         
+        if x4:
+            edvolu2: DTYPE = (1 + non_zero_counts2).sum()
+            edvolume2 = rnd(edvolu2 * a_point)
+            edvolume = (edvolume + edvolume2) / 2
+            
         # Add the reverse atom pair as well, for easy processing later
         volume_pair[a_pair]       = [volume, edvolume]
-        volume_pair[a_pair[::-1]] = [volume, edvolume]
+        if polar == False:
+            volume_pair[a_pair[::-1]] = [volume, edvolume]
     
     else:
         volume_pair[a_pair]       = volume
-        volume_pair[a_pair[::-1]] = volume
+        if polar == False:
+            volume_pair[a_pair[::-1]] = volume
     
     return volume_pair
 
 
-def pdb_dotarray_volume(contact_dict:dict, contacts_center:dict, contacts_dict:dict, weighted:bool, interval:float=0.2, disable_print=False):
+def pdb_dotarray_volume(contact_dict:dict, contacts_center:dict, contacts_dict:dict, polar:bool, weighted:bool, interval:float=0.2, disable_print=False):
     @timer(disable_print=disable_print)
     def count_volume():
         Pairs_Volume = []
@@ -153,7 +252,7 @@ def pdb_dotarray_volume(contact_dict:dict, contacts_center:dict, contacts_dict:d
             a_pair_xyz  = {name: contacts_center[name] for name in a_contact_dict if name in contacts_center}   # Coordinates
             a_pair_info = {name: contacts_dict  [name] for name in a_contact_dict if name in contacts_dict  }   # Radius, volume
             
-            volume_pair = determine_inner(a_pair, a_pair_xyz, a_pair_info, weighted, interval)
+            volume_pair = determine_inner(a_pair, a_pair_xyz, a_pair_info, polar, weighted, interval)
             Pairs_Volume.append(volume_pair)
         
         volume = {} # Use update() to quickly merge dictionaries

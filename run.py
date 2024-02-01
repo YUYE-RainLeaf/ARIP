@@ -5,11 +5,11 @@ import os
 
 from arip3 import arip_main
 
-def process_file(in_fp, o, ref, dx, t, d, w, r, s, z, disable_print):
+def process_file(in_fp, o, ref, dx, t, d, p, w, r, s, z, disable_print):
     try:
         if not disable_print:
             print(f'>> process: {in_fp}, ref: {ref}')
-        arip_main(in_fp, o, ref, dx, t, d, w, r, s, z, disable_print)
+        arip_main(in_fp, o, ref, dx, t, d, p, w, r, s, z, disable_print)
     except SystemExit:
         print(f'Error processing file: {in_fp}')
     except:
@@ -25,6 +25,7 @@ if __name__ == '__main__':
     parser.add_argument('-c', nargs='*', default=None, type=float, help='surface and volume lower cutoff, two values')
     parser.add_argument('-d', nargs='?', default=None, const=0, type=float, help='closest distance between two atoms used to determine contact')
     parser.add_argument('-t', default=os.cpu_count(), type=int, help='number of threads')
+    parser.add_argument('-p', action='store_true', help='analyze only the interactions mediated by water molecules of hydrophilic atoms')
     parser.add_argument('-w', action='store_true', help='use atomic overlapping weighted algorithm for volume')
     parser.add_argument('-r', action='store_true', help='generate .csv file for every residue')
     parser.add_argument('-s', action='store_true', help='only calculate surface area')
@@ -60,6 +61,12 @@ if __name__ == '__main__':
     # The number of threads should not exceed the number of CPUs. If the user enters a larger number, the number of threads is determined by the number of CPUs.
     num_threads = min(args.t, os.cpu_count())
     
+    # Only analyze the interactions mediated by water molecules of hydrophilic atoms
+    polar = True if args.p else False
+    if polar:
+        args.ref = Path(__file__).parent / 'data/s15092.xyz'
+        args.dx = 0.05
+
     # Use atomic overlapping weighted algorithm
     weighted = True if args.w else False
     
@@ -84,7 +91,7 @@ if __name__ == '__main__':
     with ThreadPoolExecutor(max_workers=num_threads) as executor:
         executor.map(process_file, in_fps, [args.o]*len(in_fps), [args.ref]*len(in_fps),
                      [args.dx]*len(in_fps), [threshold]*len(in_fps), [dist]*len(in_fps),
-                     [weighted]*len(in_fps), [each]*len(in_fps), [only]*len(in_fps),
-                     [compress]*len(in_fps), [disable_print]*len(in_fps))
+                     [polar]*len(in_fps), [weighted]*len(in_fps), [each]*len(in_fps),
+                     [only]*len(in_fps), [compress]*len(in_fps), [disable_print]*len(in_fps))
         
         

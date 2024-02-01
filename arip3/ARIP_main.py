@@ -196,7 +196,11 @@ def parse_atom_model(atom_model:AtomModel, distance, disable_print=False) -> Dat
 
 
 @timer_s
-def arip_analyze(idx:int, name:str, atom_model:List[str], interval:float, ref_fp:Path, out_dp:Path, threshold:List[float], distance:float, weighted:bool, each:bool, only:bool, compress:bool, disable_print=False):
+def arip_analyze(idx:int, name:str, atom_model:List[str], interval:float, ref_fp:Path, out_dp:Path, threshold:List[float], distance:float, polar:bool, weighted:bool, each:bool, only:bool, compress:bool, disable_print=False):
+    # If only the interactions mediated by water molecules of hydrophilic atoms are analyzed, then atoms are no longer considered in contact based on the 1.4Å criterion
+    if polar:
+        distance = 0
+    
     # Load data
     aa_df, nt_df, ns_df = parse_atom_model(atom_model, distance, disable_print)
     
@@ -237,20 +241,44 @@ def arip_analyze(idx:int, name:str, atom_model:List[str], interval:float, ref_fp
     # Create a dictionary, the key is the atom name, and the value is a list of all atom names in contact with this atom
     # >0.00001 is to remove the atom itself, because the distance from itself to itself is 0
     eps = 0.00001
-    contact_map = {
-        atom1: atoms[(dists[i] > eps) & (dists[i] < radii[i] + radii)]
-            for i, (atom1, radius) in enumerate(zip(atoms, radii))
-    }
-    
-    contact_dict = {} # Build into atom pairs
-    for key, values in contact_map.items():
-        key_residue = key.split('_')[0]
-        for value in values:
-            value_residue = value.split('_')[0]
-            if key_residue != value_residue:
-                new_key = (key, value)
-                new_values = list(values) + [key]
-                contact_dict[new_key] = new_values
+    if polar:
+        contact_map = {
+            atom1: atoms[(dists[i] > radii[i] + radii) & (dists[i] < radii[i] + radii + 2.8)]
+                for i, (atom1, radius) in enumerate(zip(atoms, radii))
+        }
+        contact_dict = {} # Build into atom pairs
+        for key, values in contact_map.items():
+            __ = key.split('_')
+            key_residue = __[0]
+            key_atom    = __[1]
+            ele = key_atom[0:2] if len(key_atom) >= 2 else key_atom[0]
+            
+            if key_atom[0] in ['N', 'O', 'P', 'S'] and ele not in ['SE', 'NA', 'NI', 'PB', 'PD', 'PT', 'SB', 'SC', 'SN', 'SR']:
+                for value in values:
+                    __ = value.split('_')
+                    value_residue = __[0]
+                    value_atom    = __[1]
+                    ele2 = value_atom[0:2] if len(value_atom) >= 2 else value_atom[0]
+                    
+                    if key_residue != value_residue and ele2 not in ['SE', 'NA', 'NI', 'PB', 'PD', 'PT', 'SB', 'SC', 'SN', 'SR']:
+                        new_key    = (key, value)
+                        new_values = [key, value]
+                        contact_dict[new_key] = new_values        
+            
+    else:
+        contact_map = {
+            atom1: atoms[(dists[i] > eps) & (dists[i] < radii[i] + radii)]
+                for i, (atom1, radius) in enumerate(zip(atoms, radii))
+        }
+        contact_dict = {} # Build into atom pairs
+        for key, values in contact_map.items():
+            key_residue = key.split('_')[0]
+            for value in values:
+                value_residue = value.split('_')[0]
+                if key_residue != value_residue:
+                    new_key = (key, value)
+                    new_values = list(values) + [key]
+                    contact_dict[new_key] = new_values
                
     # If memory is insufficient, skip the current file
     if not contact_dict:
@@ -261,18 +289,18 @@ def arip_analyze(idx:int, name:str, atom_model:List[str], interval:float, ref_fp
     if only:
         volume = {}
     else:
-        volume = pdb_dotarray_volume(contact_dict, contacts_center, contacts_dict, weighted, interval, disable_print)
+        volume = pdb_dotarray_volume(contact_dict, contacts_center, contacts_dict, polar, weighted, interval, disable_print)
     
     # Delete unnecessary columns
     contact_df = atom_df[['Name', 'x', 'y', 'z', 'R', 'Surf', 'Type']]
     
     # Calculate the distance and contact surface between atom pairs
-    surface = pdb_dotarray_surface(ref_fp, contact_df, contact_dict, disable_print)
+    surface = pdb_dotarray_surface(ref_fp, contact_df, contact_dict, polar, disable_print)
     
     # Organize data and determine contact type
     pdb_csv_sort(idx, name, dihedral_angle, surface, volume, out_dp, threshold, compress, each, disable_print)
 
-def arip_main(in_fp:Path, out_dp:Path, ref_fp:Path, interval:float, threshold:List[float], distance:float, weighted:bool, each:bool, only:bool, compress:bool, disable_print=False):
+def arip_main(in_fp:Path, out_dp:Path, ref_fp:Path, interval:float, threshold:List[float], distance:float, polar:bool, weighted:bool, each:bool, only:bool, compress:bool, disable_print=False):
     name = Path(in_fp.stem).stem # Use stem twice because the compressed file needs to remove the .pdb suffix again
     a_models = load_atom_models(name, in_fp)
     
@@ -283,7 +311,7 @@ def arip_main(in_fp:Path, out_dp:Path, ref_fp:Path, interval:float, threshold:Li
                 else:         print(f'Skipping file {name}_MODEL_{idx} due to no valid atoms')
                 
             else:
-                t = arip_analyze(idx, name, a_model, interval, ref_fp, out_dp, threshold, distance, weighted, each, only, compress, disable_print)
+                t = arip_analyze(idx, name, a_model, interval, ref_fp, out_dp, threshold, distance, polar, weighted, each, only, compress, disable_print)
                 
                 if isinstance(t, float): # If there is a memory shortage error, then t is a tuple containing 3 elements, the last two are -1. If there is no error, t is a floating point number
                     if idx == -1: print(f'The PDB {name} run OK, time cost: {t:.3f}s')
