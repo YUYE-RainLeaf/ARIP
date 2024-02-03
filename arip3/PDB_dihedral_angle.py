@@ -1,3 +1,6 @@
+import warnings
+warnings.filterwarnings("ignore")
+
 from Bio.PDB import PDBParser, PPBuilder
 
 from .PDB_constants import AA
