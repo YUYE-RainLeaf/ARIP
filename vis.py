@@ -22,7 +22,8 @@ def vis_xyz(args):
 
 def vis_pdb(args):
     for idx, a_model in load_atom_models('', args.f):
-        df_tmp = parse_atom_model(a_model)
+        plt.figure()
+        df_tmp = parse_atom_model(a_model, 0)
     
         df = pd.concat(df_tmp, axis=0)
         ax = plt.axes(projection='3d')
