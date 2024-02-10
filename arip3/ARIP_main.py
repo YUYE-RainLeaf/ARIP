@@ -9,12 +9,14 @@ from .PDB_constants import *
 from .PDB_dihedral_angle import pdb_dihedral_angle
 from .PDB_dotarray_volume import pdb_dotarray_volume
 from .PDB_dotarray_surface import pdb_dotarray_surface
+from .PDB_sasa import pdb_dotarray_sasa
 from .PDB_csv_sort import pdb_csv_sort
 from .utils import timer_s, die
 from .typing import *
 
 import math
 pi = math.pi
+
 
 def load_atom_models(name, fp:Path) -> List[Tuple[int, AtomModel]]:
     # Determine if it is a compressed file
@@ -130,8 +132,7 @@ def parse_atom_model(atom_model:AtomModel, distance, disable_print=False) -> Dat
                     atom_info['Surf'].append(new_s)
                     atom_info['Volu'].append(new_v)
         
-        # Non-standard residue
-        else:
+        else: # Non-standard residue
             __ = Radius['UNDEF'][Ele]
             atom_info['R']   .append(__[0])
             atom_info['Type'].append(__[1])
@@ -196,7 +197,7 @@ def parse_atom_model(atom_model:AtomModel, distance, disable_print=False) -> Dat
 
 
 @timer_s
-def arip_analyze(idx:int, name:str, atom_model:List[str], interval:float, ref_fp:Path, out_dp:Path, threshold:List[float], distance:float, polar:bool, weighted:bool, each:bool, only:bool, compress:bool, disable_print=False):
+def arip_analyze(idx:int, name:str, atom_model:List[str], interval:float, ref_fp:Path, out_dp:Path, threshold:List[float], distance:float, polar:bool, accessible:bool, weighted:bool, each:bool, only:bool, compress:bool, disable_print=False):
     # If only the interactions mediated by water molecules of hydrophilic atoms are analyzed, then atoms are no longer considered in contact based on the 1.4Å criterion
     if polar:
         distance = 0
@@ -290,7 +291,12 @@ def arip_analyze(idx:int, name:str, atom_model:List[str], interval:float, ref_fp
         volume = {}
     else:
         volume = pdb_dotarray_volume(contact_dict, contacts_center, contacts_dict, polar, weighted, interval, disable_print)
-    
+
+    # Calculate SASA
+    sasa = False
+    if accessible:
+        sasa = pdb_dotarray_sasa(ref_fp, atom_model, disable_print)
+
     # Delete unnecessary columns
     contact_df = atom_df[['Name', 'x', 'y', 'z', 'R', 'Surf', 'Type']]
     
@@ -298,9 +304,9 @@ def arip_analyze(idx:int, name:str, atom_model:List[str], interval:float, ref_fp
     surface = pdb_dotarray_surface(ref_fp, contact_df, contact_dict, polar, disable_print)
     
     # Organize data and determine contact type
-    pdb_csv_sort(idx, name, dihedral_angle, surface, volume, out_dp, threshold, compress, each, disable_print)
+    pdb_csv_sort(idx, name, dihedral_angle, sasa, surface, volume, out_dp, threshold, compress, each, disable_print)
 
-def arip_main(in_fp:Path, out_dp:Path, ref_fp:Path, interval:float, threshold:List[float], distance:float, polar:bool, weighted:bool, each:bool, only:bool, compress:bool, disable_print=False):
+def arip_main(in_fp:Path, out_dp:Path, ref_fp:Path, interval:float, threshold:List[float], distance:float, polar:bool, accessible:bool, weighted:bool, each:bool, only:bool, compress:bool, disable_print=False):
     name = Path(in_fp.stem).stem # Use stem twice because the compressed file needs to remove the .pdb suffix again
     a_models = load_atom_models(name, in_fp)
     
@@ -311,7 +317,7 @@ def arip_main(in_fp:Path, out_dp:Path, ref_fp:Path, interval:float, threshold:Li
                 else:         print(f'Skipping file {name}_MODEL_{idx} due to no valid atoms')
                 
             else:
-                t = arip_analyze(idx, name, a_model, interval, ref_fp, out_dp, threshold, distance, polar, weighted, each, only, compress, disable_print)
+                t = arip_analyze(idx, name, a_model, interval, ref_fp, out_dp, threshold, distance, polar, accessible, weighted, each, only, compress, disable_print)
                 
                 if isinstance(t, float): # If there is a memory shortage error, then t is a tuple containing 3 elements, the last two are -1. If there is no error, t is a floating point number
                     if idx == -1: print(f'The PDB {name} run OK, time cost: {t:.3f}s')

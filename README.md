@@ -50,6 +50,11 @@ Supports most non-standard residues and ligands.
   - If both atoms are N, O, P, or S, the calculated area and volume are the average of the contact areas and volumes of these two atoms with one water molecule each
   - Since the values are usually small, this mode further increases the number of points in the volume calculation grid to achieve higher accuracy
   - In this mode, custom distance criteria for determining contact between two atoms cannot be used, and the effect of multiple atoms in contact at the same time will not be considered
+
+- Calculate SASA (Solvent Accessible Surface Area)
+  - `python3 run.py your/file/or/dir -a`
+  - This mode calculates the surface area on each atom within a residue that is not in contact with any other atom, and then sums them up
+  - The results of the SASA calculation are in the CSV file with prefix '_SUM'.
   
 - Calculate volume based on atomic overlap weighted algorithm
   - `python3 run.py your/file/or/dir -w`
@@ -96,14 +101,16 @@ Supports most non-standard residues and ligands.
     - PD: Phosphodiester Bond
 	
 - Other
-  - BSA: Buried Surface Area, that is, the sum of the contact surface of each atom in the residue
+  - SASA: Solvent Accessible Surface Area, surface area on the residue not in contact with any atom
+  - Surf: Surface area, the sum of the contact surface area of each atom in the residue
   - Volu: Volume, contact volume
   - AOWV: Atomic Overlap Weighted Volume
   - UNDEF: Undefined, interactions related to non-standard residues that have not been judged
 
 ##### Summary Information
-- Files starting with '_ALL' contain all atom-atom contact information, including atom type, contact distance, surface, volume, etc.
-- Files starting with '_SUM' contain each residue's dihedral angles (proteins only), covalent and non-covalent BSA and contact volume, etc.
+- Files with preffix '_ALL' contain all atom-atom contact information, including atom type, contact distance, surface, volume, etc.
+- Files with preffix '_RES' contain summarized information on pairwise contacts between residues.
+- Files with preffix '_SUM' contain each residue's dihedral angles (proteins only), SASA (if available), covalent and non-covalent contact areas, and contact volumes, etc.
 
 ##### Success Information
 - If the PDB file only has one MODEL
@@ -158,4 +165,4 @@ Email: xiangtao312@outlook.com
 WeChat: Communist21
 
 ----
-2024/02/01
+2024/02/10

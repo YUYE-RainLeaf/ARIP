@@ -23,5 +23,6 @@ PointAtomGen = Generator[Tuple[Point, Atom], None, None]
 Contact = Tuple[str, float,  str]       # radius, surface, volume
 
 Angles   = Dict[str, Tuple[float, float]]
+SASA     = Dict[str, float]
 Surfaces = Dict[a_pair, List[Union[float, str]]]
 Volumes  = Dict[a_pair, float]
