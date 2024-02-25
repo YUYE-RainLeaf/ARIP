@@ -162,7 +162,6 @@ Supports most non-standard residues and ligands.
   
 ### Contact me
 Email: xiangtao312@outlook.com
-WeChat: Communist21
 
 ----
 2024/02/10
