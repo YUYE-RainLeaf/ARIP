@@ -2,6 +2,7 @@ import warnings
 warnings.filterwarnings('ignore', 'Optimal rotation is not uniquely or poorly defined for the given sets of vectors.')
 
 from tqdm import tqdm
+import copy
 import numpy as np
 import pandas as pd
 from pandas import DataFrame
@@ -158,13 +159,14 @@ def pdb_dotarray_sasa(ref_fp:Path, atom_model:AtomModel, disable_print=False) ->
                 a_atom_list = contact_dict[a_residue][a_atom]
                 a_atom_xyz  = {name: contacts_center[name] for name in a_atom_list if name in contacts_center}     # Coordinates
                 a_atom_info = {name: contacts_dict  [name] for name in a_atom_list if name in contacts_dict  }     # Radius, surface, type
+                a_atom_xyz_copy = copy.deepcopy(a_atom_xyz) # deepcopy
                 
-                for atom in a_atom_xyz:
-                    a_atom_xyz[atom] -= contacts_center[a_atom]
+                for atom in a_atom_xyz_copy:
+                    a_atom_xyz_copy[atom] -= contacts_center[a_atom]
                 R1 = contacts_dict[a_atom][0]
                 a_sasa = contacts_dict[a_atom][1] / len(Coordinates)
                 
-                sasa_atom = determine_inner(Coordinates, R1, a_sasa, a_atom_list, a_atom_xyz, a_atom_info)
+                sasa_atom = determine_inner(Coordinates, R1, a_sasa, a_atom_list, a_atom_xyz_copy, a_atom_info)
                 Residue_SASA += sasa_atom
         
             sasa[a_residue] = Residue_SASA
