@@ -81,8 +81,12 @@ def pdb_dotarray_sasa(ref_fp:Path, atom_model:AtomModel, disable_print=False) ->
                     atom_info['R']   .append(__[0])
                     atom_info['Surf'].append(__[2])
             
-            else: # Non-standard residue
+            elif Res in Radius['UNDEF']: # Non-standard residue
                 __ = Radius['UNDEF'][Ele]
+                atom_info['R']   .append(__[0])
+                atom_info['Surf'].append(__[2])
+            else:
+                __ = Radius['UNDEF']['X']
                 atom_info['R']   .append(__[0])
                 atom_info['Surf'].append(__[2])
         
@@ -108,9 +112,9 @@ def pdb_dotarray_sasa(ref_fp:Path, atom_model:AtomModel, disable_print=False) ->
         nt_tmp['ResName'] = nt_tmp['ResName'].map(NT)
         
         # Use a different connector for easy replacement
-        aa_tmp['Name'] = aa_tmp['Chain'] + '-' + aa_tmp['ResName'] + '_' + aa_tmp['Atom']
-        nt_tmp['Name'] = nt_tmp['Chain'] + '-' + nt_tmp['ResName'] + '_' + nt_tmp['Atom']
-        ns_tmp['Name'] = ns_tmp['Chain'] + ';' + ns_tmp['ResName'] + '_' + ns_tmp['Atom']
+        aa_tmp['Name'] = aa_tmp['Chain'] + ',' + aa_tmp['ResName'] + '+' + aa_tmp['Atom']
+        nt_tmp['Name'] = nt_tmp['Chain'] + ',' + nt_tmp['ResName'] + '+' + nt_tmp['Atom']
+        ns_tmp['Name'] = ns_tmp['Chain'] + ';' + ns_tmp['ResName'] + '+' + ns_tmp['Atom']
         
         aa_df = aa_tmp[['Name', 'x', 'y', 'z', 'R', 'Surf']]
         nt_df = nt_tmp[['Name', 'x', 'y', 'z', 'R', 'Surf']]
@@ -143,7 +147,7 @@ def pdb_dotarray_sasa(ref_fp:Path, atom_model:AtomModel, disable_print=False) ->
         }
         contact_dict = {} # Build into atom pairs
         for key, values in contact_map.items():
-            residue_name = key.split('_')[0]
+            residue_name = key.split('+')[0]
             if residue_name not in contact_dict:
                 contact_dict[residue_name] = {}
             contact_dict[residue_name][key] = values.tolist()

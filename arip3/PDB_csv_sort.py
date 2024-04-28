@@ -11,14 +11,14 @@ from .typing import *
 def range_kind(surface, volume, threshold):
     info_df = pd.DataFrame(list(surface.items()), columns=['Pair', 'Tuple'])
     info_df[['Surface', 'Distance', 'Type1', 'Type2']] = pd.DataFrame(info_df['Tuple'].tolist(), index=info_df.index)
-    info_df[['Residue1', 'Atom1', 'Residue2', 'Atom2']] = info_df['Pair'].apply('_'.join).str.split('_', expand=True)
+    info_df[['Residue1', 'Atom1', 'Residue2', 'Atom2']] = info_df['Pair'].apply('+'.join).str.split('+', expand=True)
     
     # Add volume, atom type, interaction type
     info_df['Volume'] = np.nan
     info_df['Range']  = 0
     info_df['Kind']   = 'UNDEF'
-    info_df['Dist1']  = info_df['Residue1'].apply(lambda x: int(x.split('-')[0].split(';')[0][1:]))
-    info_df['Dist2']  = info_df['Residue2'].apply(lambda x: int(x.split('-')[0].split(';')[0][1:]))
+    info_df['Dist1']  = info_df['Residue1'].apply(lambda x: int(x.split(',')[0].split(';')[0][1:]))
+    info_df['Dist2']  = info_df['Residue2'].apply(lambda x: int(x.split(',')[0].split(';')[0][1:]))
     info_df['Dist']   = info_df['Dist1'] - info_df['Dist2']
     
     # Match volume
@@ -211,9 +211,9 @@ def range_kind(surface, volume, threshold):
     # Sort by chain and sequence
     all_df_copy = all_df.copy()
     all_df_copy['Chain1']    = all_df_copy['Residue1'].str[0]
-    all_df_copy['Sequence1'] = all_df_copy['Residue1'].apply(lambda x: int(x.split('-')[0].split(';')[0][1:]))    
+    all_df_copy['Sequence1'] = all_df_copy['Residue1'].apply(lambda x: int(x.split(',')[0].split(';')[0][1:]))    
     all_df_copy['Chain2']    = all_df_copy['Residue2'].str[0]
-    all_df_copy['Sequence2'] = all_df_copy['Residue2'].apply(lambda x: int(x.split('-')[0].split(';')[0][1:]))
+    all_df_copy['Sequence2'] = all_df_copy['Residue2'].apply(lambda x: int(x.split(',')[0].split(';')[0][1:]))
     all_df_copy = all_df_copy.sort_values(['Chain1', 'Sequence1', 'Chain2', 'Sequence2'])
 
     all_df = all_df_copy.drop(columns=['Chain1', 'Sequence1', 'Chain2', 'Sequence2'])
@@ -295,7 +295,7 @@ def summary(sasa, dihedral_angle, Residues):
     
     # Sort by chain and sequence
     sum_df['Chain']    = sum_df['Residue'].str[0]
-    sum_df['Sequence'] = sum_df['Residue'].apply(lambda x: int(x.split('-')[0].split(';')[0][1:]))
+    sum_df['Sequence'] = sum_df['Residue'].apply(lambda x: int(x.split(',')[0].split(';')[0][1:]))
     sorted_df = sum_df.sort_values(['Chain', 'Sequence'])
 
     # If all are nucleic acids, there are no dihedral angle parameters
@@ -304,8 +304,8 @@ def summary(sasa, dihedral_angle, Residues):
     else:
         res_df = sorted_df.drop(columns=['Chain', 'Sequence']).dropna(axis=1, how='all')
 
-    res_df['Residue'] = res_df['Residue'].str.replace('-', '')
-    res_df['Residue'] = res_df['Residue'].str.replace(';', '_')
+    res_df['Residue'] = res_df['Residue'].str.replace(',', '')
+    res_df['Residue'] = res_df['Residue'].str.replace(';', '+')
 
     # Drop columns that are all zeros
     for col in res_df.columns:
@@ -368,15 +368,15 @@ def residue_pairs(Residues):
     # Sort
     def custom_sort_key(x):
         # Split the string to obtain the chain id and number
-        parts = x.split('-') if '-' in x else x.split(';')
+        parts = x.split(',') if ',' in x else x.split(';')
         chain_part = parts[0]
         chain = chain_part[0]
         number = int(chain_part[1:])
         return (chain, number)
 
     aggregated_df.sort_values(by=['Residue1', 'Residue2'], key=lambda x: x.map(custom_sort_key), inplace=True)
-    aggregated_df['Residue1'] = aggregated_df['Residue1'].str.replace('-', '').str.replace(';', '_')
-    aggregated_df['Residue2'] = aggregated_df['Residue2'].str.replace('-', '').str.replace(';', '_')    
+    aggregated_df['Residue1'] = aggregated_df['Residue1'].str.replace(',', '').str.replace(';', '+')
+    aggregated_df['Residue2'] = aggregated_df['Residue2'].str.replace(',', '').str.replace(';', '+')    
 
     # Drop columns that are all zeros
     for col in aggregated_df.columns:
@@ -396,10 +396,10 @@ def pdb_csv_sort(idx:int, name:str, dihedral_angle:Angles, sasa:SASA, surface:Su
         all_df = all_df.dropna(axis=1, how='all')
         
         all_tmp = all_df.copy()
-        all_tmp['Residue1'] = all_tmp['Residue1'].str.replace('-', '')
-        all_tmp['Residue1'] = all_tmp['Residue1'].str.replace(';', '_')
-        all_tmp['Residue2'] = all_tmp['Residue2'].str.replace('-', '')
-        all_tmp['Residue2'] = all_tmp['Residue2'].str.replace(';', '_')
+        all_tmp['Residue1'] = all_tmp['Residue1'].str.replace(',', '')
+        all_tmp['Residue1'] = all_tmp['Residue1'].str.replace(';', '+')
+        all_tmp['Residue2'] = all_tmp['Residue2'].str.replace(',', '')
+        all_tmp['Residue2'] = all_tmp['Residue2'].str.replace(';', '+')
 
         Residues = dict(list(all_df.groupby('Residue1')))            
         res_df   = summary(sasa, dihedral_angle, Residues)

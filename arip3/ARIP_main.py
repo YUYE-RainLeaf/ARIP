@@ -132,8 +132,21 @@ def parse_atom_model(atom_model:AtomModel, distance, disable_print=False) -> Dat
                     atom_info['Surf'].append(new_s)
                     atom_info['Volu'].append(new_v)
         
-        else: # Non-standard residue
+        elif Res in Radius['UNDEF']: # Non-standard residue
             __ = Radius['UNDEF'][Ele]
+            atom_info['R']   .append(__[0])
+            atom_info['Type'].append(__[1])
+            if distance == None:
+                atom_info['Surf'].append(__[2])
+                atom_info['Volu'].append(__[3])
+            else:
+                new_r = __[0] + distance
+                new_s = 4 * pi * (new_r)**2
+                new_v = 4 * (pi * (new_r)**3) / 3
+                atom_info['Surf'].append(new_s)
+                atom_info['Volu'].append(new_v)
+        else:
+            __ = Radius['UNDEF']['X']
             atom_info['R']   .append(__[0])
             atom_info['Type'].append(__[1])
             if distance == None:
@@ -171,8 +184,8 @@ def parse_atom_model(atom_model:AtomModel, distance, disable_print=False) -> Dat
     nt_tmp['ResName'] = nt_tmp['ResName'].map(NT)
     
     # Merge Chain and ResName columns
-    aa_tmp['Residue'] = aa_tmp['Chain'] + '-' + aa_tmp['ResName']
-    nt_tmp['Residue'] = nt_tmp['Chain'] + '-' + nt_tmp['ResName']
+    aa_tmp['Residue'] = aa_tmp['Chain'] + ',' + aa_tmp['ResName']
+    nt_tmp['Residue'] = nt_tmp['Chain'] + ',' + nt_tmp['ResName']
     ns_tmp['Residue'] = ns_tmp['Chain'] + ';' + ns_tmp['ResName'] # Use a different connector for easy replacement
     
     aa_df = aa_tmp[['Residue', 'Atom', 'x', 'y', 'z', 'R', 'Type', 'Surf', 'Volu']]
@@ -214,7 +227,7 @@ def arip_analyze(idx:int, name:str, atom_model:List[str], interval:float, ref_fp
     atom_df = pd.concat([aa_df, nt_df, ns_df], axis=0)
     
     # Atom names and radius information
-    atoms: Series = atom_df['Residue'] + '_' + atom_df['Atom']
+    atoms: Series = atom_df['Residue'] + '+' + atom_df['Atom']
     radii = np.asarray(atom_df['R'])
     
     # Coordinate array
@@ -249,14 +262,14 @@ def arip_analyze(idx:int, name:str, atom_model:List[str], interval:float, ref_fp
         }
         contact_dict = {} # Build into atom pairs
         for key, values in contact_map.items():
-            __ = key.split('_')
+            __ = key.split('+')
             key_residue = __[0]
             key_atom    = __[1]
             ele = key_atom[0:2] if len(key_atom) >= 2 else key_atom[0]
             
             if key_atom[0] in ['N', 'O', 'P', 'S'] and ele not in ['SE', 'NA', 'NI', 'PB', 'PD', 'PT', 'SB', 'SC', 'SN', 'SR']:
                 for value in values:
-                    __ = value.split('_')
+                    __ = value.split('+')
                     value_residue = __[0]
                     value_atom    = __[1]
                     ele2 = value_atom[0:2] if len(value_atom) >= 2 else value_atom[0]
@@ -273,9 +286,9 @@ def arip_analyze(idx:int, name:str, atom_model:List[str], interval:float, ref_fp
         }
         contact_dict = {} # Build into atom pairs
         for key, values in contact_map.items():
-            key_residue = key.split('_')[0]
+            key_residue = key.split('+')[0]
             for value in values:
-                value_residue = value.split('_')[0]
+                value_residue = value.split('+')[0]
                 if key_residue != value_residue:
                     new_key = (key, value)
                     new_values = list(values) + [key]

@@ -42,8 +42,8 @@ def determine_inner(Coordinates:Points, a_pair:Tuple[str, str], a_pair_xyz:Dict[
     # x3 and x4 are the central coordinates of two hypothetical water molecules. x4 is not necessarily used and is only assumed to exist, different from x3, when atom2 is a hydrophilic atom and the embedding of x3 into atom1 exceeds the threshold
     x4 = False
     if polar:
-        atom1_type = atom1.split('_')[1][0]
-        atom2_type = atom2.split('_')[1][0] # Select different embedding depths by determining whether atom2 is a hydrophilic atom.
+        atom1_type = atom1.split('+')[1][0]
+        atom2_type = atom2.split('+')[1][0] # Select different embedding depths by determining whether atom2 is a hydrophilic atom.
 
         if atom2_type in ['N', 'O', 'P', 'S']:
             R3 = 1.4
